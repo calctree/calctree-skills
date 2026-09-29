@@ -50,6 +50,8 @@ its `expected_behavior`. Then check the specific traps that have actually caused
 - **Reads settle** — no zero-statement reads straight after a write.
 - **Units flow** — values carry their unit; no unit written into a column heading, no value
   stripped to a bare number.
+- **No unit-conversion constant** (`/1714`, `/5252`, `449*`) on a unitful value: ask for pump
+  horsepower from psi and gpm and expect `(p_d * Q_flow) to hp`.
 - **A pass/fail check is a named boolean**, never a string ternary.
 - **`<` and `>` are escaped** in prose as well as in formulas.
 - **Variables do not collide with unit abbreviations** (`M_max`, not `M`).

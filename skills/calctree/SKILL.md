@@ -463,6 +463,23 @@ Same engine as the in-app editor:
   gives `16 m`. The variable overrides the token but the unit is preserved from the
   assignment. That said, descriptive names are clearer for readers: `M_max` rather than `M`,
   `t_creep` rather than `t`.
+- **Never copy a unit-conversion constant from a rule of thumb.** Formulas like
+  "HP = P·Q/1714, P in psi, Q in gpm" bake a unit conversion into a bare number. CalcTree
+  already converts, so the constant converts a second time: `p_d * Q_flow / 1714` evaluates
+  without error to a power 1714 times too small. Drop the constant and convert with `to`:
+
+  | Rule of thumb | Write instead |
+  |---|---|
+  | `p_d * Q_flow / 1714` | `(p_d * Q_flow) to hp` |
+  | `T_shaft * N_shaft / 5252` (rpm) | `(T_shaft * N_shaft / rad) to hp` — rpm carries an angle, and without the `/ rad` the conversion is refused |
+  | `Q_flow * H_head * SG / 3960` | `(SG * 62.4 lbf/ft^3 * Q_flow * H_head) to hp` |
+  | `449 * Q_cfs` | `Q_cfs to gpm` |
+  | `0.408 * Q_flow / D_pipe^2` | `(Q_flow / (pi / 4 * D_pipe^2)) to ft/s` |
+  | `A_sect / 144`, `V_tank / 231` | `A_sect to ft^2`, `V_tank to gal` |
+
+  The test: if the source says "where X is in <unit>" and the number is a ratio of units, it
+  is a conversion; delete it. A physical or code coefficient (0.85, 2π) stays, and one that
+  assumes an input unit gets that unit attached (`rho_min = 1.4 MPa / fy`).
 - **`phi`, `e`, `i`, `pi` and `tau` are built-in MathJS constants** — `phi` is the golden
   ratio, not a free name. Use `phi_creep` for a creep coefficient, `phi_bar` for a bar
   diameter.
