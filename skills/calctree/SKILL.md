@@ -466,16 +466,18 @@ Same engine as the in-app editor:
 - **Never copy a unit-conversion constant from a rule of thumb.** Formulas like
   "HP = P·Q/1714, P in psi, Q in gpm" bake a unit conversion into a bare number. CalcTree
   already converts, so the constant converts a second time: `p_d * Q_flow / 1714` evaluates
-  without error to a power 1714 times too small. Drop the constant and convert with `to`:
+  without error to a power 1714 times too small. Drop the constant. Convert a computed result
+  with `to`; a line that only converts an existing quantity is deleted, and the quantity used
+  as it is, since the engine converts it wherever it is used:
 
   | Rule of thumb | Write instead |
   |---|---|
   | `p_d * Q_flow / 1714` | `(p_d * Q_flow) to hp` |
   | `T_shaft * N_shaft / 5252` (rpm) | `(T_shaft * N_shaft / rad) to hp` — rpm carries an angle, and without the `/ rad` the conversion is refused |
   | `Q_flow * H_head * SG / 3960` | `(SG * 62.4 lbf/ft^3 * Q_flow * H_head) to hp` |
-  | `449 * Q_cfs` | `Q_cfs to gpm` |
+  | `449 * Q_cfs` | no new variable: use `Q_cfs` itself |
   | `0.408 * Q_flow / D_pipe^2` | `(Q_flow / (pi / 4 * D_pipe^2)) to ft/s` |
-  | `A_sect / 144`, `V_tank / 231` | `A_sect to ft^2`, `V_tank to gal` |
+  | `A_sect / 144`, `V_tank / 231` | no new variable: use `A_sect`, `V_tank` itself |
 
   The test: if the source says "where X is in <unit>" and the number is a ratio of units, it
   is a conversion; delete it. A physical or code coefficient (0.85, 2π) stays, and one that
