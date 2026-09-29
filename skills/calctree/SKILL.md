@@ -467,23 +467,24 @@ Same engine as the in-app editor:
   "HP = P·Q/1714, P in psi, Q in gpm" bake a unit conversion into a bare number. CalcTree
   already converts, so the constant converts a second time: `p_d * Q_flow / 1714` evaluates
   without error to a power 1714 times too small. Drop the constant. Convert a computed result
-  with `to`; a line that only converts an existing quantity is deleted, and the quantity used
-  as it is, since the engine converts it wherever it is used:
+  with `to`. For a line that only converts an existing quantity, use the quantity itself in
+  the calculation, since the engine converts it wherever it is used; if the page must show it
+  in the other unit, make a display copy with `to` (§ 8). Never keep the constant:
 
   | Rule of thumb | Write instead |
   |---|---|
   | `p_d * Q_flow / 1714` | `(p_d * Q_flow) to hp` |
   | `T_shaft * N_shaft / 5252` (rpm) | `(T_shaft * N_shaft / rad) to hp` — rpm carries an angle, and without the `/ rad` the conversion is refused |
   | `Q_flow * H_head * SG / 3960` | `(SG * 62.4 lbf/ft^3 * Q_flow * H_head) to hp` |
-  | `449 * Q_cfs` | no new variable: use `Q_cfs` itself |
+  | `449 * Q_cfs` | use `Q_cfs` itself; to show it in gpm, `Q_gpm_r = Q_cfs to gpm` |
   | `0.408 * Q_flow / D_pipe^2` | `(Q_flow / (pi / 4 * D_pipe^2)) to ft/s` |
-  | `A_sect / 144`, `V_tank / 231` | no new variable: use `A_sect`, `V_tank` itself |
+  | `A_sect / 144`, `V_tank / 231` | use `A_sect`, `V_tank` itself; to show them, `A_sect_r = A_sect to ft^2`, `V_tank_r = V_tank to gal` |
 
   The test: if the source says "where X is in <unit>" and the number is a ratio of units, it
   is a conversion; delete it, and write out any physical property or geometry it also carried
   (3960 includes water's weight density, 62.4 lbf/ft³; 0.408 the π/4 of a pipe's area). A
-  physical or code coefficient (0.85, 2π) stays, and one that
-  assumes an input unit gets that unit attached (`rho_min = 1.4 MPa / fy`).
+  physical or code coefficient (0.85, 2π) stays, and one that assumes an input unit gets that
+  unit attached (`rho_min = 1.4 MPa / fy`).
 - **`phi`, `e`, `i`, `pi` and `tau` are built-in MathJS constants** — `phi` is the golden
   ratio, not a free name. Use `phi_creep` for a creep coefficient, `phi_bar` for a bar
   diameter.
