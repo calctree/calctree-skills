@@ -480,7 +480,9 @@ Same engine as the in-app editor:
   | `A_sect / 144`, `V_tank / 231` | no new variable: use `A_sect`, `V_tank` itself |
 
   The test: if the source says "where X is in <unit>" and the number is a ratio of units, it
-  is a conversion; delete it. A physical or code coefficient (0.85, 2π) stays, and one that
+  is a conversion; delete it, and write out any physical property or geometry it also carried
+  (3960 includes water's weight density, 62.4 lbf/ft³; 0.408 the π/4 of a pipe's area). A
+  physical or code coefficient (0.85, 2π) stays, and one that
   assumes an input unit gets that unit attached (`rho_min = 1.4 MPa / fy`).
 - **`phi`, `e`, `i`, `pi` and `tau` are built-in MathJS constants** — `phi` is the golden
   ratio, not a free name. Use `phi_creep` for a creep coefficient, `phi_bar` for a bar
