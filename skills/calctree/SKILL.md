@@ -539,7 +539,7 @@ bite:
   | `decimal` | decimal places, used with `format="number"` |
   | `showValue`, `showTitle` | `"true"`/`"false"`. `showTitle="false",showValue="true"` shows only the value; `showTitle="true",showValue="false"` only the name. If you give only one, the other defaults to its opposite; if you give neither, both show |
   | `variableType` | how to render it: `number` for a value, `trafficlights` for a pass/fail chip, `image` for a chart |
-  | `booleanTrueLabel`, `booleanFalseLabel` | accepted and stored, but the chip does not show them yet: a boolean still reads `true` / `false`, with or without `format="boolean-badge"` |
+  | `booleanTrueLabel`, `booleanFalseLabel` | accepted, but a traffic-light chip does not use them. Label a chip through its value instead (below) |
 
   Name mentions (`showTitle="true",showValue="false"`) also render inline, and text after a
   mention in a table cell is kept.
@@ -551,12 +551,19 @@ bite:
   [beam1](mention:variable:beam1:variableType="image")
   ```
 
-  The chip is green `true` or red `false`. Set `showTitle="false"`: without it the chip reads
-  `within_limits = true`, and with `showValue="false"` it is an empty coloured chip. To make
-  the chip say `PASS` / `FAIL` instead, mention a two-element list rather than the bare
-  boolean: `within_limits_r = [within_limits, within_limits ? "PASS" : "FAIL"]`. The first
-  element drives the colour, the second is the label; the check itself stays the named
-  boolean.
+  A traffic light's value is either a bare boolean, which shows as a green `true` or red
+  `false` chip, or a two-element list `[boolean, label]`: the boolean sets the colour and the
+  label is the text. The list is the designed way to word a chip, and it is the form the
+  editor itself writes when you insert a traffic light:
+
+  ```
+  within_limits_tl = within_limits ? [true, "PASS"] : [false, "FAIL"]
+  ```
+
+  Keep the check itself as the named boolean and build the labelled value from it. Mentioned
+  with `showTitle="false",showValue="true"`, that reads `PASS` or `FAIL`. Without
+  `showTitle="false"` the chip reads `within_limits_tl = PASS`; with `showValue="false"` it is
+  an empty coloured chip.
 - **Do not write `<Mention>` tags.** `<Mention key=… value=… />` is a legacy tag the editor
   still reads, so old pages keep opening, but no longer writes. It renders as a block
   element: dropped into a sentence it breaks the sentence onto three lines, whatever its
@@ -629,7 +636,7 @@ Calculation content is MDX. The components you will actually use:
 | `<EquationBlock>` | several formulas in one block |
 | `<Python>` | a Python statement, needs a `name` or the node shows as "Untitled" |
 | `[key](mention:variable:key:…)` | display a computed value, an image, or a traffic-light chip, inline (§ 8). Not the legacy `<Mention>` tag |
-| `<TrafficLights>` | the pass/fail chip, driven by a named boolean |
+| `<TrafficLights>` | a traffic light as its own block: `<TrafficLights ui="trafficlights" name="Utilisation check" formula="util_check = util &lt;= 1 ? [true, &quot;PASS&quot;] : [false, &quot;FAIL&quot;]" titleVisible="false" formulaVisible="false" valueVisible="true" />`. With the name and formula hidden it shows just the chip; with default visibility it reads `util_check = PASS` |
 | `<MatrixBlock>` | matrix input and output |
 | `<SimpleInput>`, `<SelectInput>`, `<RadioInput>` | interactive inputs |
 | `<RichTable>` | a table whose cells hold components; plain GFM pipe tables otherwise |
