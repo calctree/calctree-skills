@@ -27,6 +27,7 @@
     "Never name a variable after a unit abbreviation (N, V, Pa, M, mm, m, s, kg, K, A, g, h, d, J): a variable named mm shadows the millimetre unit and nulls every later conversion on the page",
     "A pass/fail check must be a named boolean, never a string ternary: 'check = util <= 1 ? \"PASS\" : \"FAIL\"' is always truthy, so a traffic-light chip renders green whatever the result",
     "Escape < and > as &lt; and &gt; everywhere including prose: a raw one truncates the MDX import from that point on",
+    "Show a computed value in prose with a mention link, which renders inline with the value's unit: [fctm](mention:variable:fctm:format=\"number\",decimal=\"2\",showTitle=\"false\",showValue=\"true\",variableType=\"number\"). Round for display with decimal on the mention, not in a rounded copy of the value. Do not write the legacy <Mention> tag: it renders as a block and breaks the sentence",
     "MathJS variables with units arrive in Python as ct.quantity() objects already: do not wrap them again. Create new ones with ct.quantity('100 kN'), convert with .to('unit'), and read the number with .magnitude (a property, not a method)",
     "Never put an offset unit (degC, degF) in scope on a page with a Python cell: it fails the whole cell with 'Ambiguous operation with offset unit'",
     "Deleting a page is a soft delete: trashed pages still return from the pages query",

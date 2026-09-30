@@ -435,6 +435,13 @@ M_max = load * span^2 / 8
 </EquationBlock>
 ```
 
+A value mention, inline in prose. It prints the computed value with its unit, rounded to
+`decimal` places:
+
+```
+The mean tensile strength is [fctm](mention:variable:fctm:format="number",decimal="2",showTitle="false",showValue="true",variableType="number").
+```
+
 No H1 in the body: the page title already renders as the heading.
 
 ## 6. Reading back and verifying
@@ -476,9 +483,9 @@ Same engine as the in-app editor:
   | `p_d * Q_flow / 1714` | `(p_d * Q_flow) to hp` |
   | `T_shaft * N_shaft / 5252` (rpm) | `(T_shaft * N_shaft / rad) to hp` — rpm carries an angle, and without the `/ rad` the conversion is refused |
   | `Q_flow * H_head * SG / 3960` | `(SG * 62.4 lbf/ft^3 * Q_flow * H_head) to hp` |
-  | `449 * Q_cfs` | use `Q_cfs` itself; to show it in gpm, `Q_gpm_r = Q_cfs to gpm` |
+  | `449 * Q_cfs` | use `Q_cfs` itself; to show it in gpm, `Q_gpm = Q_cfs to gpm` |
   | `0.408 * Q_flow / D_pipe^2` | `(Q_flow / (pi / 4 * D_pipe^2)) to ft/s` |
-  | `A_sect / 144`, `V_tank / 231` | use `A_sect`, `V_tank` itself; to show them, `A_sect_r = A_sect to ft^2`, `V_tank_r = V_tank to gal` |
+  | `A_sect / 144`, `V_tank / 231` | use `A_sect`, `V_tank` itself; to show them, `A_sect_ft2 = A_sect to ft^2`, `V_tank_gal = V_tank to gal` |
 
   The test: if the source says "where X is in <unit>" and the number is a ratio of units, it
   is a conversion; delete it, and write out any physical property or geometry it also carried
@@ -502,31 +509,57 @@ The API will happily create a page that computes but presents badly. These are t
 bite:
 
 - **Let units flow.** A dimensional value carries its unit and prints it, so never write the
-  unit into a column heading and never strip a value to a bare number to do so. Convert for
-  display with `to` (`As_r = (round(As / (1 mm^2), 0) * (1 mm^2)) to mm^2`); without the `to`
-  MathJS auto-rescales and mm² becomes ha. `round()` on a unitful value must strip the unit
-  first: `round(X / (1 mm), 3)`.
-- **Round for display in a separate copy**, never on the value the rest of the calculation
-  consumes.
+  unit into a column heading and never strip a value to a bare number to do so. To show a
+  value in a different unit, make a display copy with `to` (`As_mm2 = As to mm^2`); without
+  the `to` MathJS auto-rescales and mm² becomes ha. If you do need `round()` in a
+  calculation, strip the unit first: `round(X / (1 mm), 3)`.
+- **Round on the mention, not in the calculation.** Display precision is a property of the
+  mention: set `decimal`. Do not make rounded copies of values just to present them, and
+  never round a value the rest of the calculation consumes. Rounding that is part of the
+  engineering, such as rounding a bar count up to a whole bar, belongs in the formula.
 - **A pass/fail check must be a named boolean**, never a string ternary.
   `check = util <= 1 ? "PASS" : "FAIL"` is always truthy, so a traffic-light chip renders
   green whatever the result. Write `within_limits = util <= 1` and name the variable so it
   reads as the verdict.
-- **Mentions are display-only, and carry no formatting attributes.** Do the rounding in
-  MathJS. Put no `format` and no `decimal` on a mention: `format` is dropped on import,
-  and `decimal` without it renders the value at 0 decimal places, so `1.08` with
-  `decimal="2"` prints `1` and `0.05` with `decimal="4"` prints `0` — a wrong number, not
-  a formatting nit. A bare mention of a rounded value renders exactly as rounded.
-- **A name-only mention (`showValue="false"`) is a block element.** Never wrap one in
-  text: `Yield strength (<Mention .../>)` renders as three lines with a stranded `)`.
-  Give the symbol its own table column, and use inline LaTeX for notation in prose. A mention of a variable the page never defines renders as the word `undefined`
-  and no check will catch it, so every mention key must resolve. Text placed immediately
-  after a mention inside a table cell is dropped: put the unit in a separate column.
+- **A mention is a markdown link with a `mention:` URL.** For a value in prose:
+
+  ```
+  [fctm](mention:variable:fctm:format="number",decimal="2",showTitle="false",showValue="true",variableType="number")
+  ```
+
+  The URL is `mention:variable:<key>:<config>`, where `<key>` is the variable name
+  (URL-encoded if it contains anything other than letters, digits and `_`) and `<config>`
+  is a comma-separated list of `name="value"` pairs. It renders inline, inside the
+  sentence, as the value to `decimal` places followed by its unit: `2.90 MPa` for
+  `fctm = 2.896… MPa` with `decimal="2"`, `32837 MPa` with `decimal="0"`. The config keys:
+
+  | Key | Values |
+  |---|---|
+  | `format` | `number` for a rounded value; also `general`, `scientific`, `percentage`, `number-thousand-separator`, `currency`, `boolean-badge`, `excel-default`, `preserveInputString`. An unknown value falls back to `general` |
+  | `decimal` | decimal places, used with `format="number"` |
+  | `showValue`, `showTitle` | `"true"`/`"false"`. `showTitle="false",showValue="true"` shows only the value; `showTitle="true",showValue="false"` only the name. If you give only one, the other defaults to its opposite; if you give neither, both show |
+  | `variableType` | how to render it: `number` for a value, `trafficlights` for a pass/fail chip, `image` for a chart |
+  | `booleanTrueLabel`, `booleanFalseLabel` | labels for a boolean shown with `format="boolean-badge"` |
+
+  A traffic-light chip driven by a named boolean, and a chart from a Python block:
+
+  ```
+  [within_limits](mention:variable:within_limits:variableType="trafficlights")
+  [beam1](mention:variable:beam1:variableType="image")
+  ```
+- **Do not write `<Mention>` tags.** `<Mention key=… value=… />` is a legacy tag the editor
+  still reads, so old pages keep opening, but no longer writes. It renders as a block
+  element: dropped into a sentence it breaks the sentence onto three lines, whatever its
+  attributes. Use the link form above.
+- **Every mention key must resolve.** A mention of a variable the page never defines renders
+  as the word `undefined` and no check will catch it. Put a symbol in its own table column
+  or use inline LaTeX for notation in prose; the value's unit prints with the mention, so
+  do not type a unit after it.
 - **Charts** need four things together or you get an untitled node and no image: a named
   Python block, a bare fence rather than a language-tagged one, a plot prefix set before
-  `plt.show()`, and an image mention immediately above the block. Any name that renders as a
-  label needs a leading underscore and underscores between words; hyphens render as minus
-  signs and literal spaces are dropped.
+  `plt.show()`, and an image mention (`variableType="image"`, above) immediately above the
+  block. Any name that renders as a label needs a leading underscore and underscores between
+  words; hyphens render as minus signs and literal spaces are dropped.
 - **Escape `<` and `>` as `&lt;` and `&gt;` everywhere**, prose included. A raw one truncates
   the import from that point on.
 - **Never put an offset unit (`degC`, `degF`) in scope on a page with a Python cell.** One
@@ -585,7 +618,7 @@ Calculation content is MDX. The components you will actually use:
 | `<Assignment>` | one named formula |
 | `<EquationBlock>` | several formulas in one block |
 | `<Python>` | a Python statement, needs a `name` or the node shows as "Untitled" |
-| `<Mention>` | display a computed value, an image, or a traffic-light chip |
+| `[key](mention:variable:key:…)` | display a computed value, an image, or a traffic-light chip, inline (§ 8). Not the legacy `<Mention>` tag |
 | `<TrafficLights>` | the pass/fail chip, driven by a named boolean |
 | `<MatrixBlock>` | matrix input and output |
 | `<SimpleInput>`, `<SelectInput>`, `<RadioInput>` | interactive inputs |
