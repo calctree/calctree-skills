@@ -539,14 +539,24 @@ bite:
   | `decimal` | decimal places, used with `format="number"` |
   | `showValue`, `showTitle` | `"true"`/`"false"`. `showTitle="false",showValue="true"` shows only the value; `showTitle="true",showValue="false"` only the name. If you give only one, the other defaults to its opposite; if you give neither, both show |
   | `variableType` | how to render it: `number` for a value, `trafficlights` for a pass/fail chip, `image` for a chart |
-  | `booleanTrueLabel`, `booleanFalseLabel` | labels for a boolean shown with `format="boolean-badge"` |
+  | `booleanTrueLabel`, `booleanFalseLabel` | accepted and stored, but the chip does not show them yet: a boolean still reads `true` / `false`, with or without `format="boolean-badge"` |
+
+  Name mentions (`showTitle="true",showValue="false"`) also render inline, and text after a
+  mention in a table cell is kept.
 
   A traffic-light chip driven by a named boolean, and a chart from a Python block:
 
   ```
-  [within_limits](mention:variable:within_limits:variableType="trafficlights")
+  [within_limits](mention:variable:within_limits:showTitle="false",showValue="true",variableType="trafficlights")
   [beam1](mention:variable:beam1:variableType="image")
   ```
+
+  The chip is green `true` or red `false`. Set `showTitle="false"`: without it the chip reads
+  `within_limits = true`, and with `showValue="false"` it is an empty coloured chip. To make
+  the chip say `PASS` / `FAIL` instead, mention a two-element list rather than the bare
+  boolean: `within_limits_r = [within_limits, within_limits ? "PASS" : "FAIL"]`. The first
+  element drives the colour, the second is the label; the check itself stays the named
+  boolean.
 - **Do not write `<Mention>` tags.** `<Mention key=… value=… />` is a legacy tag the editor
   still reads, so old pages keep opening, but no longer writes. It renders as a block
   element: dropped into a sentence it breaks the sentence onto three lines, whatever its
