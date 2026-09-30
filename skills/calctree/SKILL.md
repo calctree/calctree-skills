@@ -152,6 +152,10 @@ liveness test. To check if a specific page is actually live, query `page(workspa
 — a `null` return means it's deleted. This matters because `simpleCalculate` and
 `calculation()` work on deleted pages, but `createPdfReport` and the UI do not.
 
+To see the workspace as the sidebar shows it, read `pageTree(workspaceId) { tree }` instead:
+it returns the page and folder tree as JSON, with trashed nodes flagged `isDeleted: true`
+(REFERENCE.md).
+
 When matching by title, prefer the most recently modified copy, or ask the user to
 confirm if there are duplicates. If the user provides a page URL or ID, use that directly
 rather than searching by title.
@@ -280,6 +284,11 @@ incompatibility, or division by zero. Report these to the user rather than guess
 - **Python statement outputs may be incomplete** in the `simpleCalculate` response. If
   results seem missing, fall back to `get_page_context` which reads the stored graph
   values (though those reflect default inputs, not your overrides).
+- **The response is capped at about 6 MB.** Every module-level Python name comes back as a
+  named value, so a Python cell that leaves large arrays at module level can push the
+  response over the limit. Then every `simpleCalculate` on that page fails with "Response
+  payload size exceeded maximum allowed payload size", although the page works in the
+  browser. See § 9 for the fix.
 - **Settle ~2 seconds after a write before executing.** If you just created or modified a
   page, wait before calling `simpleCalculate` or the graph may not have finished
   evaluating.
@@ -501,7 +510,21 @@ Same engine as the in-app editor:
   thing. Agree the spelling once, before the pages exist — renaming later means rebuilding every
   page that used the old name, because content cannot be edited in place (see gotchas).
 - Within one `multiline_mathjs` formula, define a variable before using it. Across separate
-  statements order does not matter: it is a dependency graph.
+  statements order does not matter: it is a dependency graph. (Page references are the
+  exception, § 11.)
+
+### Selecting on a string
+
+MathJS will not do string equality inside a conditional: `_choice == "Option A" ? 1 : 2` fails
+with "Cannot convert ... to a number". Look the value up by position instead:
+
+```
+choice_index = MATCH(_choice, ["Option A", "Option B", "Option C"], 0)
+chosen_value = INDEX([0.05, 0.3, 1.0], choice_index)
+```
+
+This is the normal way to drive numbers from a `<SelectInput>` whose options are
+human-readable labels.
 
 ## 8. Writing pages that read correctly
 
@@ -517,10 +540,15 @@ bite:
   mention: set `decimal`. Do not make rounded copies of values just to present them, and
   never round a value the rest of the calculation consumes. Rounding that is part of the
   engineering, such as rounding a bar count up to a whole bar, belongs in the formula.
-- **A pass/fail check must be a named boolean**, never a string ternary.
+- **A pass/fail check must be a named boolean**, never a plain string ternary.
   `check = util <= 1 ? "PASS" : "FAIL"` is always truthy, so a traffic-light chip renders
   green whatever the result. Write `within_limits = util <= 1` and name the variable so it
-  reads as the verdict.
+  reads as the verdict. To word the chip, build a `[boolean, label]` pair from it (below);
+  there the string is a label beside a boolean, so it does not have that problem.
+  - Show the check with a `<TrafficLights>` element (§ 10) or a `trafficlights` mention, not
+    as a line in an `<EquationBlock>`, which renders it as an unreadable piecewise brace.
+  - A `<TrafficLights>` component inside a plain pipe-table cell is dropped; cells only hold
+    components inside a `<RichTable>`. In a plain table, use a `trafficlights` mention.
 - **A mention is a markdown link with a `mention:` URL.** For a value in prose:
 
   ```
@@ -618,6 +646,44 @@ Plots:
   reference the first image as `beam1`, otherwise the image mention cannot resolve.
 - End with `plt.show()`. A bare `fig` emits nothing.
 
+### Naming inside a Python statement
+
+**Every module-level name in the cell becomes a value on the page, including loop
+variables**, and a one-letter name will shadow a MathJS unit. A drawing loop written
+`for t in tags:` puts `t` into page scope as an integer, which shadows the **tonne** unit,
+and every downstream `... to t` then fails with "Unexpected type of argument in function
+to". Because one bad line kills a whole multiline block, the visible symptom is that a dozen
+unrelated values go `unevaluated` while the Python statement itself reports success.
+
+- Prefix throwaway names with `_`: `_row`, `_node`, `_fx`. Comprehensions have their own
+  scope and are safe; a bare `for x in ...:` at module level is not.
+- Spell units out in MathJS: `to tonne`, not `to t`.
+
+Single letters that are live MathJS units and should never be module-level Python names:
+`t A C F J K N T V W L l g s h d b m`, plus their prefixed forms.
+
+### Keep the outputs small
+
+Because every module-level name is returned as a value, large arrays left at module level
+travel with every API result. Past about 6 MB of output (five 100,000-point arrays is
+enough) every `simpleCalculate` on the page fails with "Response payload size exceeded
+maximum allowed payload size", while the page still works in the browser. Compute the
+scalars you need inside the cell, and `del` large arrays once you have plotted them:
+
+```
+_L = span.to("m").magnitude
+_xs = np.linspace(0, _L, 100001)
+_M = load.to("kN/m").magnitude * _xs * (_L - _xs) / 2
+M_max = ct.quantity(f"{_M.max()} kN m")
+ctconfig.plot_prefix = "moment"
+plt.plot(_xs, _M)
+plt.show()
+del _xs, _M
+```
+
+A Python cell in a page that is called as a page reference (§ 11) runs with the caller's
+inputs, like the rest of that page.
+
 Only libraries pre-installed in the environment can be imported; imports are checked before
 execution. The engineering set includes `numpy`, `pandas`, `scipy`, `sympy`, `matplotlib`,
 `seaborn`, `pint`, `handcalcs`, `sectionproperties`, `concreteproperties`, `structuralcodes`,
@@ -636,17 +702,82 @@ Calculation content is MDX. The components you will actually use:
 | `<EquationBlock>` | several formulas in one block |
 | `<Python>` | a Python statement, needs a `name` or the node shows as "Untitled" |
 | `[key](mention:variable:key:…)` | display a computed value, an image, or a traffic-light chip, inline (§ 8). Not the legacy `<Mention>` tag |
-| `<TrafficLights>` | a traffic light as its own block: `<TrafficLights ui="trafficlights" name="Utilisation check" formula="util_check = util &lt;= 1 ? [true, &quot;PASS&quot;] : [false, &quot;FAIL&quot;]" titleVisible="false" formulaVisible="false" valueVisible="true" />`. With the name and formula hidden it shows just the chip; with default visibility it reads `util_check = PASS` |
+| `<TrafficLights>` | a traffic light as its own block: `<TrafficLights ui="trafficlights" name="Utilisation check" formula="util_check = util &lt;= 1 ? [true, &quot;PASS&quot;] : [false, &quot;FAIL&quot;]" titleVisible="false" formulaVisible="false" valueVisible="true" />`. With the name and formula hidden it shows just the chip; with default visibility it reads `util_check = PASS`. A bare boolean formula (`ok = util &lt;= 1`) works too and shows a chip reading `true` or `false` (`ok = true` with default visibility) |
+| `<PageReference>` | call another page's calculation with this page's inputs, rendered as a card (§ 11) |
 | `<MatrixBlock>` | matrix input and output |
 | `<SimpleInput>`, `<SelectInput>`, `<RadioInput>` | interactive inputs |
 | `<RichTable>` | a table whose cells hold components; plain GFM pipe tables otherwise |
 
 ## 11. Linking pages
 
-A cross-page reference is a snapshot of the source page's computed values, created as a
-`multiline_mathjs` statement whose object carries a metadata key alongside the values. That
-metadata key is what makes it a source-linked page reference rather than a plain block.
-Summary and roll-up pages should **reference** upstream results, not recompute them.
+Summary and roll-up pages should **reference** upstream results, not recompute them. The way
+to do that is a **page reference**: a live, parameterised call into another page's
+calculation, not a copy of its numbers. The referenced page re-runs with the inputs you pass
+it, Python cells included, and its results come back into your page's scope.
+
+### `<PageReference>`
+
+```mdx
+<PageReference name="Shear via template" codeTitle="Shear_Check" templateId="<templateId>">
+<Input name="d_eff" value="d_c" />
+<Input name="rho_l" value="rho_c" />
+<Input name="fck" value="fck_c" />
+</PageReference>
+```
+
+- **Keyed on `templateId`**: the id of a workspace template made from the referenced page
+  (§ 12), never a page id, revision id or workspace id. The template supplies the page and
+  the published version the reference pins.
+- **`codeTitle`** names the reference in this page's scope. Results are read through it.
+- **`name`** is the statement title shown on the card.
+- **`<Input>` children remap the referenced page's inputs.** `name` is an input on the
+  referenced page; `value` is any MathJS expression evaluated in **this** page's scope: a bare
+  variable, a unit literal such as `"12 m"`, or an expression like
+  `Wind_Envelope.uplift * (1 kN/m^2)`. Only single-line assignments on the referenced page
+  (one `<Assignment>` per input) can be remapped; a variable defined inside an
+  `<EquationBlock>` cannot.
+- It renders as a card showing the referenced page with the inputs it was given
+  (`x = x_c = 5`).
+- Check `statementsCreated`: a reference counts as one statement.
+
+### `<Node engine="calcSource">`: the same call without a card
+
+A reference can also be written as a bare calculation node. It creates the same statement
+and returns the same results, but renders nothing on the page, which suits a subroutine
+whose working you do not want to show:
+
+````mdx
+<Node name="Shear_Check" engine="calcSource">
+```
+{"scope": {}, "codeTitle": "Shear_Check",
+ "calculationId": "<referenced page id>", "revisionId": "<its calculation revisionId>",
+ "inputs": {"d_eff": "d_c", "rho_l": "rho_c", "fck": "fck_c"}}
+```
+</Node>
+````
+
+`revisionId` must be a real revision of the referenced page's calculation, read from the
+`calculation` query's `revisionId` field. `inputs` maps each referenced input name to a
+MathJS expression over this page's scope, exactly as `<Input>` does.
+
+### Behaviours to know before you design around references
+
+1. **A reference returns the referenced page's whole scope**, not just one block. Keep that
+   page's output surface deliberate; a Python cell's module-level arrays travel too (§ 9).
+2. **The accessor is `<codeTitle>.<variable>`**: `Shear_Check.v_Rd_c`. Using the reference's
+   `name` instead returns `null` with type `unevaluated`, with no error anywhere.
+3. **One scope entry per `codeTitle` per page.** Reference the same `codeTitle` twice on one
+   page and both cards render correct numbers, but only the **last** lands in scope; the first
+   is unreachable from MathJS. To call one calculation several times and aggregate the
+   results, give each instance its own `codeTitle`, which in practice means one sub-page per
+   case (§ 13).
+4. **References nest.** A page that is itself a host can be referenced by another page, and
+   inputs propagate all the way down.
+5. **Document order matters.** A reference is not scheduled from its inputs the way ordinary
+   statements are (verified for the `<Node>` form; treat `<PageReference>` the same way), so place it after every assignment it reads, and write the page in one
+   `insertMDXContent` rather than appending a reference to a page whose statements already
+   exist. The symptom of getting this wrong is a reference with no values while the variable
+   it reads looks undefined.
 
 ### Structuring a library of calculations
 
@@ -669,9 +800,14 @@ Two consequences worth planning for:
   factors and recompute the same design values internally. It works, and it means a change to a
   material rule has to be made in as many places as you have checks.
 
-### Creating cross-page references
+### Snapshot references (older form)
 
-There are two ways to create a cross-page reference:
+An older form copies the source page's computed values into a `multiline_mathjs` statement
+whose object carries a metadata key alongside the values. That metadata key is what makes it
+a source-linked page reference rather than a plain block. It has no input remapping and does
+not re-run when the source changes. Prefer a page reference.
+
+There are two ways to create a snapshot reference:
 
 **Via `reference_page_via_api`** (the programmatic path): reads the source page's live values
 and writes a `multiline_mathjs` statement on the target page. Best for scripts that wire
@@ -701,7 +837,127 @@ without the unit. To restore units on the consuming page, multiply by a unit lit
 V_chain = ref_params.V_target * 1 ft/minute
 ```
 
-## 12. Datasets (CSV lookup tables)
+## 12. Saving a page as a reusable template
+
+A **workspace template** is a saved calculation your workspace can start new pages from, and
+it is what a `<PageReference>` points at. Three mutations manage templates, and `content` is
+simply the page's MDX, not a page id and not a serialised document (REFERENCE.md has the
+full documents):
+
+- `createWorkspaceTemplate(workspaceId, input: { id, name, description, tags, content, source: workspace, sourceId })`
+- `updateWorkspaceTemplate(workspaceId, id, input: { name, description, tags, content })`, all optional
+- `deleteWorkspaceTemplate(workspaceId, id)`
+
+All three return immediately with correlation metadata; the result arrives over the sync
+subscription, so do not expect the updated template in the response.
+
+- **You supply `id` on create.** Generate it yourself and keep it: that id is the
+  `templateId` a reference needs and how you update the template later, and there is no
+  lookup by name.
+- **Update rather than delete and recreate.** Recreating mints a new id and orphans every
+  reference to the old one.
+- **Tags are a closed vocabulary** if you want them to act as filters: `discipline:`
+  (structural, geotechnical, civil, mechanical, electrical), `jurisdiction:` (aus, nz, us, uk,
+  eu), `design-type:` (check, analysis, sizing, reference). Any other tag is kept as a
+  freeform tag and matches no filter.
+- **Reading templates back.** `workspaceTemplates(workspaceId, first, after)` lists them,
+  paged by `id`: pass the last row's `id` as `after` and keep going until a page comes back
+  empty. `first` is capped server-side at 100. `workspaceTemplate(workspaceId, id)` fetches
+  one, and `pageTemplates(workspaceId, pageId)` is how a caller holding only a page id finds
+  the `templateId` a `<PageReference>` needs.
+
+### Versions: the part that makes references work
+
+A `<PageReference>` pins a **published version**, not the template row. A template with no
+version cannot be referenced.
+
+- **Creating a template from a page publishes v1 for you.** Pass `sourceId` set to the page
+  id and `createWorkspaceTemplate` publishes the first version as part of the create. Do not
+  also call `publishWorkspaceTemplateVersion` for v1; it is refused because one already
+  exists.
+- **Send none of `versionId`, `revisionId` or `docContentVersion` on create.** Send any one
+  and the server demands all three, and `docContentVersion` is a hash of the editor's
+  document that an API caller cannot compute. Omit all three and the server pins the page's
+  latest saved state itself.
+- **`sourceId` is what makes a template publishable.** A template created with no page behind
+  it has nothing to freeze, so it can never have a version and can never be referenced.
+- **Later versions** go through `publishWorkspaceTemplateVersion`, passing
+  `expectedLatestVersionId`; send it even when it is `null`, despite its being typed
+  optional.
+- **Wait for the page to save.** The server pins what has been saved, so publishing
+  immediately after writing content can freeze the state from before your edit. Verify by
+  reading the version back rather than trusting the call returned.
+
+## 13. Multi-page projects: the tree, folders, copies and deleting
+
+A project is a page tree, and the pages in it should call each other rather than repeat each
+other. One pattern carries almost all of it:
+
+- A **module** is a self-contained calculation that shows its full working and has sensible
+  defaults of its own. It is saved as a template (§ 12) and exposes its results in a named
+  block.
+- A **host** owns the project's inputs, *calls* modules with them through page references
+  (§ 11), reads their results back with `<codeTitle>.<variable>`, and takes the envelope, the
+  verdict or the summary.
+
+Hosts nest, so a summary page can call a sub-summary that calls three modules, and the
+project's inputs propagate all the way down. Set the geometry once on the top page and
+everything below re-runs.
+
+**Rule 3 of § 11 shapes the tree.** Because only one scope entry survives per `codeTitle`,
+the same module cannot be called several times on one page and then aggregated. When a
+calculation has to run once per case (per wind direction, per load combination, per storey),
+give each case its own sub-page with its own result block name, and have the summary
+reference those. A well-built project has more small pages than you would first expect, and
+each case is independently reviewable.
+
+### The page tree
+
+`createPageSync` sets a page's own parent pointer but does **not** file it in the tree. Call
+`addPageNode(workspaceId, { pageId, parentId })` as well, or the page exists, computes and is
+reachable by URL while being invisible in the sidebar.
+
+Ordering and restructuring go through
+`movePageNode(workspaceId, { pageId, placement: { parentId, beforeId, afterId }, expectedParentId })`.
+Prefer it to rewriting the tree.
+
+Read the tree with `pageTree(workspaceId) { tree }`, which returns JSON and flags trashed
+nodes `isDeleted: true`. Do not use `pages()` for this: it also lists soft-deleted pages.
+
+### Folders
+
+`addFolderNode(workspaceId, { folderId, title, parentId })` makes a folder. You supply
+`folderId`, and a folder id is a valid `parentId` for `createPageSync` and `addPageNode`, so
+pages can be created straight into it. `renameFolderNode`, `moveFolderNode`,
+`deleteFolderNode` and `restoreFolderNode` manage folders after that. An ordinary page used as
+a group header works too, and lets the group carry an index table; pick one and be consistent.
+
+### Copies
+
+`duplicatePageIntoWorkspace(sourceWorkspaceId, sourcePageId, newPageId, targetWorkspaceId,
+parentPageId)` makes an exact copy of a page (content, statements and charts) in another
+workspace. You supply `newPageId`. To change a copy's inputs, read its
+statements with the `calculation` query and rewrite the input statement in place with
+`createOrUpdateCalculation`, reusing its existing `statementId`.
+`duplicateFolderIntoWorkspace` does the same for a whole folder, which is how to start a new
+job from a finished project.
+
+### Deleting pages cleanly
+
+`deletePage(workspaceId, id)` soft-deletes the page (`page(workspaceId, id)` then returns
+`null`) but leaves its node in the page tree, and the page never reaches the app's Trash. The
+orphaned node flickers in the sidebar, and there is no mutation that removes a page node.
+
+To delete pages cleanly, delete them through a folder:
+
+1. `addFolderNode` a temporary folder.
+2. `movePageNode` each page into it: `input: { pageId, placement: { parentId: <folderId> } }`.
+3. `deleteFolderNode(workspaceId, { folderId, keepChildren: false, deletedDate })`.
+
+The folder goes to Trash with its pages (`isDeleted: true` in `pageTree`), and
+`restoreFolderNode(workspaceId, { folderId })` brings it back.
+
+## 14. Datasets (CSV lookup tables)
 
 Upload a CSV dataset to a page via the presigned upload flow. This is a two-step process:
 
@@ -733,11 +989,11 @@ Rules:
   values `"25"` will not match a numeric lookup value `25`. Use `toString()` in the lookup
   or ensure the input is a string (e.g., via a `SelectInput` that outputs strings).
 
-## 13. Batch page-creation pipeline
+## 15. Batch page-creation pipeline
 
 The full sequence for programmatically creating a set of interconnected calculation pages:
 
-1. **Delete** any existing pages (tolerates already-deleted pages).
+1. **Delete** any existing pages, through a folder so they leave the tree cleanly (§ 13).
 2. **Create** each page with `create_page_in_tree`. Optionally set units with `updatePage`.
 3. **Upload CSV datasets** to each page that needs them.
 4. **Wait 60 seconds** for dataset processing.
@@ -750,10 +1006,11 @@ Short delays (300–500 ms) between API calls prevent rate limiting. The manifes
 mapping slugs to page IDs and URLs) should be updated after each run so re-runs can
 delete-and-recreate cleanly.
 
-## 14. Gotchas worth knowing before you start
+## 16. Gotchas worth knowing before you start
 
 - Deleting a page is a **soft** delete. Trashed pages still come back from the pages query
-  and accumulate, which slows workspace sync.
+  and accumulate, which slows workspace sync. `deletePage` also leaves the page's node in the
+  tree; delete through a folder instead (§ 13).
 - In-place content edits can append and update but **cannot remove or reorder** body nodes,
   and updating content leaves the old statements in the calculation, so every variable ends
   up defined twice and the page nulls out. To genuinely replace a page's content, delete the
