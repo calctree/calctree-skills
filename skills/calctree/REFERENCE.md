@@ -290,10 +290,10 @@ mutation($workspaceId: ID!, $id: ID!) {
 }
 ```
 
-Soft delete: `page(workspaceId, id)` then returns `null`. It leaves the page's node in the
-page tree and the page never reaches the app's Trash, and there is no mutation that removes a
-page node. To delete pages cleanly, move them into a folder and delete the folder
-(`deleteFolderNode`, below).
+Soft delete, as in the app: the page is tombstoned (`deletedAt`) and goes to the Trash, and
+`page(workspaceId, id)` then returns `null`; `page(workspaceId, id, deleted: true)` returns the
+tombstone. It deletes only that page, not its sub-pages (the app deletes the whole branch), so
+delete children first.
 
 ### createPresignedUploadPost — CSV dataset upload
 
@@ -433,8 +433,9 @@ query($workspaceId: ID!) {
 }
 ```
 
-`tree` is JSON: page and folder nodes, with trashed ones flagged `isDeleted: true`. Use this,
-not `pages`, to see what is really in a workspace.
+`tree` is JSON: page and folder nodes. A trashed folder is flagged `isDeleted: true`; a
+deleted page keeps its node, and is deleted when `page(workspaceId, id)` returns `null`. Use the
+tree for structure (what sits where) and `page` for existence.
 
 ### movePageNode
 

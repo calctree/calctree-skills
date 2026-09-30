@@ -942,20 +942,20 @@ statements with the `calculation` query and rewrite the input statement in place
 `duplicateFolderIntoWorkspace` does the same for a whole folder, which is how to start a new
 job from a finished project.
 
-### Deleting pages cleanly
+### Deleting pages
 
-`deletePage(workspaceId, id)` soft-deletes the page (`page(workspaceId, id)` then returns
-`null`) but leaves its node in the page tree, and the page never reaches the app's Trash. The
-orphaned node flickers in the sidebar, and there is no mutation that removes a page node.
+`deletePage(workspaceId, id)` is a soft delete, the same as deleting in the app: the page gets a
+`deletedAt` tombstone, goes to the Trash, and `page(workspaceId, id)` then returns `null`
+(`page(workspaceId, id, deleted: true)` returns the tombstone). The page's node stays in the
+`pageTree` JSON; that is how deletion is stored, not a leftover, because the app treats a node
+as deleted when its page is.
 
-To delete pages cleanly, delete them through a folder:
+One difference from the app: **`deletePage` deletes only that page, not its sub-pages.** The
+app deletes the whole branch. Delete the children first (walk them in `pageTree`), or a live
+sub-page is left under a deleted parent.
 
-1. `addFolderNode` a temporary folder.
-2. `movePageNode` each page into it: `input: { pageId, placement: { parentId: <folderId> } }`.
-3. `deleteFolderNode(workspaceId, { folderId, keepChildren: false, deletedDate })`.
-
-The folder goes to Trash with its pages (`isDeleted: true` in `pageTree`), and
-`restoreFolderNode(workspaceId, { folderId })` brings it back.
+To trash a whole folder, `deleteFolderNode(workspaceId, { folderId, keepChildren: false,
+deletedDate })`; `restoreFolderNode(workspaceId, { folderId })` brings it back.
 
 ## 14. Datasets (CSV lookup tables)
 
@@ -1009,8 +1009,8 @@ delete-and-recreate cleanly.
 ## 16. Gotchas worth knowing before you start
 
 - Deleting a page is a **soft** delete. Trashed pages still come back from the pages query
-  and accumulate, which slows workspace sync. `deletePage` also leaves the page's node in the
-  tree; delete through a folder instead (§ 13).
+  and accumulate, which slows workspace sync. `deletePage` does not delete sub-pages; delete
+  those first (§ 13).
 - In-place content edits can append and update but **cannot remove or reorder** body nodes,
   and updating content leaves the old statements in the calculation, so every variable ends
   up defined twice and the page nulls out. To genuinely replace a page's content, delete the

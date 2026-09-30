@@ -147,6 +147,5 @@ Every write-path test creates real pages. Clean up after:
 python3 skills/calctree/scripts/calctree_api.py delete <workspaceId> <pageId>
 ```
 
-This is a soft delete: pages still show in `pages` queries, and the page's node stays in the
-page tree without reaching the app's Trash. To remove test pages from the sidebar cleanly, move
-them into a folder and delete the folder (SKILL.md § 13).
+This is a soft delete: the pages go to the Trash and still show in `pages` queries. It
+deletes only the page you name, not its sub-pages, so delete children first (SKILL.md § 13).
