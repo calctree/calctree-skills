@@ -21,8 +21,11 @@ the key before debugging anything else.
 - Ids
 - Reads: `pages`, `page` + `pageContent`, `calculation`, `pageMDX`
 - Writes: `createPageSync`, `addPageNode`, `insertMDXContent`, `createOrUpdateCalculation`, `deletePage`
-- Statement titles, and the two traps
-- Cross-page references
+- Statement titles
+- Page references
+- Workspace templates
+- The page tree, folders and copies: `pageTree`, `movePageNode`, `addFolderNode`,
+  `deleteFolderNode`, `restoreFolderNode`, `duplicatePageIntoWorkspace`
 - In-place edits
 
 ## Execute: simpleCalculate
@@ -64,6 +67,10 @@ The response `statements` array contains every statement with its recomputed
 - Dataset variables (VLOOKUP) are **not** in the scope — they always report
   "Undefined symbol" even when the dataset works in the UI.
 - Python statement outputs may not appear in the simplified scope.
+- The response is capped at about 6 MB (6291556 bytes). Every module-level Python name
+  is returned, so large arrays left at module level make every call on the page fail
+  with "Response payload size exceeded maximum allowed payload size". `del` them in the
+  cell.
 
 ## The write path, in order
 
@@ -93,7 +100,7 @@ query($workspaceId: ID!) {
 ```
 
 Deleting a page is a **soft** delete, so trashed pages still come back here and
-accumulate.
+accumulate. For the tree as the sidebar shows it, use `pageTree`.
 
 ### page + pageContent — title and body
 
@@ -283,7 +290,10 @@ mutation($workspaceId: ID!, $id: ID!) {
 }
 ```
 
-Soft delete.
+Soft delete, as in the app: the page is tombstoned (`deletedAt`) and goes to the Trash, and
+`page(workspaceId, id)` then returns `null`; `page(workspaceId, id, deleted: true)` returns the
+tombstone. It deletes only that page, not its sub-pages (the app deletes the whole branch), so
+delete children first.
 
 ### createPresignedUploadPost — CSV dataset upload
 
@@ -319,11 +329,36 @@ against the dataset.
 automatically. No separate `createOrUpdateCalculation` call is needed for titles.
 Verified on prod 2026-08-24.
 
-## Cross-page references
+## Page references
 
-A reference is a point-in-time snapshot of the source page's computed values,
-written onto the target page as a `multiline_mathjs` statement whose object carries
-a metadata key:
+A page reference is a live, parameterised call into another page's calculation. Write it in
+the MDX you send to `insertMDXContent`, as either a `<PageReference>` (renders a card) or a
+`<Node engine="calcSource">` (renders nothing). Both create one statement, counted in
+`statementsCreated`. SKILL.md § 11 has the rules.
+
+```mdx
+<PageReference name="Shear via template" codeTitle="Shear_Check" templateId="<templateId>">
+<Input name="d_eff" value="d_c" />
+</PageReference>
+```
+
+````mdx
+<Node name="Shear_Check" engine="calcSource">
+```
+{"scope": {}, "codeTitle": "Shear_Check", "calculationId": "<referenced page id>",
+ "revisionId": "<its calculation revisionId>", "inputs": {"d_eff": "d_c"}}
+```
+</Node>
+````
+
+Read results as `<codeTitle>.<name>`, for example `Shear_Check.v_Rd_c`. The `revisionId`
+for the `<Node>` form comes from the referenced page's `calculation` query
+(`calculation(...) { revisionId }`).
+
+### Snapshot references (older form)
+
+A snapshot is a point-in-time copy of the source page's computed values, written onto the
+target page as a `multiline_mathjs` statement whose object carries a metadata key:
 
 ```
 alias = {
@@ -333,14 +368,140 @@ alias = {
 }
 ```
 
-The `__ct_meta` key is what promotes it into a real source-linked page reference
-rather than a plain block. The alias derives from the source title with every
-non-word character replaced by `_`. Values are re-serialised to mathjs source
-(`{"mathjs":"Unit","value":8,"unit":"m"}` becomes `8 m`) so downstream formulas can
-consume them.
+The `__ct_meta` key is what promotes it into a source-linked page reference rather than a
+plain block. The alias derives from the source title with every non-word character replaced
+by `_`. Values are re-serialised to mathjs source (`{"mathjs":"Unit","value":8,"unit":"m"}`
+becomes `8 m`) so downstream formulas can consume them. A snapshot does not re-run and takes
+no inputs; prefer a page reference.
 
-Summary and roll-up pages should reference upstream results this way rather than
-recomputing them.
+## Workspace templates
+
+### createWorkspaceTemplate
+
+```graphql
+mutation($workspaceId: ID, $input: CreateWorkspaceTemplateInput!) {
+  createWorkspaceTemplate(workspaceId: $workspaceId, input: $input) { id }
+}
+```
+
+```json
+{"workspaceId": "<ws>",
+ "input": {"id": "<your id>", "name": "Shear check", "description": "...",
+           "tags": ["discipline:structural", "design-type:check"],
+           "content": "<the page's MDX>", "source": "workspace", "sourceId": "<pageId>"}}
+```
+
+With `sourceId` this also publishes v1. Do not send `versionId`, `revisionId` or
+`docContentVersion`: send any one and the server demands all three.
+
+### updateWorkspaceTemplate, deleteWorkspaceTemplate
+
+```graphql
+mutation($workspaceId: ID, $id: ID!, $input: UpdateWorkspaceTemplateInput!) {
+  updateWorkspaceTemplate(workspaceId: $workspaceId, id: $id, input: $input) { id }
+}
+mutation($workspaceId: ID, $id: ID!) {
+  deleteWorkspaceTemplate(workspaceId: $workspaceId, id: $id) { id }
+}
+```
+
+`UpdateWorkspaceTemplateInput` is `{name, description, tags, content}`, all optional. These
+return correlation metadata; the change arrives over the sync subscription.
+
+### Reading templates
+
+```graphql
+query($workspaceId: ID!, $first: Int, $after: ID) {
+  workspaceTemplates(workspaceId: $workspaceId, first: $first, after: $after) { id name sourceId latestVersionId }
+}
+query($workspaceId: ID!, $pageId: ID!) {
+  pageTemplates(workspaceId: $workspaceId, pageId: $pageId) { templateId name latestVersionId }
+}
+```
+
+`workspaceTemplates` pages by `id` (pass the last row's `id` as `after`), capped at 100 per
+page. `workspaceTemplate(workspaceId, id)` fetches one. A template whose `latestVersionId` is null has no published
+version and cannot be referenced; `pageTemplates` gives the `templateId` for a page.
+
+## The page tree, folders and copies
+
+### pageTree: the tree as the sidebar shows it
+
+```graphql
+query($workspaceId: ID!) {
+  pageTree(workspaceId: $workspaceId) { tree }
+}
+```
+
+`tree` is JSON: page and folder nodes. A trashed folder is flagged `isDeleted: true`; a
+deleted page keeps its node, and is deleted when `page(workspaceId, id)` returns `null`. Use the
+tree for structure (what sits where) and `page` for existence.
+
+### movePageNode
+
+```graphql
+mutation($workspaceId: ID!, $input: MovePageNodeInput!) {
+  movePageNode(workspaceId: $workspaceId, input: $input) { previousParentId newParentId }
+}
+```
+
+```json
+{"workspaceId": "<ws>",
+ "input": {"pageId": "<pageId>", "placement": {"parentId": "<page or folder id>"}}}
+```
+
+`placement` also takes `beforeId` and `afterId` for ordering; `input` takes an optional
+`expectedParentId`.
+
+### addFolderNode
+
+```graphql
+mutation($workspaceId: ID!, $input: AddFolderNodeInput!) {
+  addFolderNode(workspaceId: $workspaceId, input: $input) { folderId }
+}
+```
+
+```json
+{"workspaceId": "<ws>", "input": {"folderId": "<your id>", "title": "Wind cases", "parentId": "<optional>"}}
+```
+
+A folder id is a valid `parentId` for `createPageSync` and `addPageNode`.
+
+### deleteFolderNode, restoreFolderNode
+
+```graphql
+mutation($workspaceId: ID!, $input: DeleteFolderNodeInput!) {
+  deleteFolderNode(workspaceId: $workspaceId, input: $input) { folderId }
+}
+mutation($workspaceId: ID!, $input: RestoreFolderNodeInput!) {
+  restoreFolderNode(workspaceId: $workspaceId, input: $input) { folderId }
+}
+```
+
+```json
+{"workspaceId": "<ws>", "input": {"folderId": "<folderId>", "keepChildren": false, "deletedDate": "2026-09-30T00:00:00.000Z"}}
+{"workspaceId": "<ws>", "input": {"folderId": "<folderId>"}}
+```
+
+With `keepChildren: false` the folder goes to Trash with the pages inside it. This is the
+clean way to delete pages: move them into a temporary folder, then delete the folder.
+
+### duplicatePageIntoWorkspace
+
+```graphql
+mutation($sourceWorkspaceId: ID!, $sourcePageId: ID!, $newPageId: ID!, $targetWorkspaceId: ID!, $parentPageId: ID) {
+  duplicatePageIntoWorkspace(sourceWorkspaceId: $sourceWorkspaceId, sourcePageId: $sourcePageId,
+                             newPageId: $newPageId, targetWorkspaceId: $targetWorkspaceId,
+                             parentPageId: $parentPageId) {
+    id title workspaceId
+  }
+}
+```
+
+An exact copy of the page (content, statements, charts) under the id you supply. To change a
+copy's inputs, rewrite the input statement with `createOrUpdateCalculation`, reusing its
+existing `statementId`. `duplicateFolderIntoWorkspace(sourceWorkspaceId, sourceFolderId,
+newFolderId, targetWorkspaceId, parentFolderId)` does the same for a folder.
 
 ## In-place edits
 

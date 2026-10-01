@@ -147,4 +147,5 @@ Every write-path test creates real pages. Clean up after:
 python3 skills/calctree/scripts/calctree_api.py delete <workspaceId> <pageId>
 ```
 
-This is a soft delete — pages still show in `pages` queries but are marked as trashed.
+This is a soft delete: the pages go to the Trash and still show in `pages` queries. It
+deletes only the page you name, not its sub-pages, so delete children first (SKILL.md § 13).
