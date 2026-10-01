@@ -609,6 +609,11 @@ bite:
   the import from that point on.
 - **Never put an offset unit (`degC`, `degF`) in scope on a page with a Python cell.** One
   such value fails the whole cell with "Ambiguous operation with offset unit".
+- **Convert a temperature to `K` before you multiply, divide, raise or convert it.** `degC`
+  and `degF` carry no offset in arithmetic, so `n * R * (20 degC)` uses 20, not 293.15, and
+  `(100 degC - 20 degC) to K` gives `353.15 K`, not `80 K`. Write `T_K = T to K` once and use
+  `T_K` from then on; give a temperature difference in `K` (`20 degC + 5 K` is correct).
+  Compound units such as `kJ/(kg K)` are fine.
 - Multi-branch categorical results belong in Python plus a table, not a nested ternary.
 
 ## 9. Python statements
