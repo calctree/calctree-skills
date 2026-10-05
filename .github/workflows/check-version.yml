@@ -1,0 +1,30 @@
+name: Check version
+
+# Fails when .claude-plugin/plugin.json and skills/calctree/VERSION disagree, and
+# confirms the zip still builds with VERSION inside it.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Versions agree
+        run: python tools/release_info.py check
+
+      - name: Zip builds and ships VERSION
+        run: |
+          python tools/package_skill.py --out dist
+          python -c "import zipfile, sys; n = zipfile.ZipFile('dist/calctree.zip').namelist(); sys.exit(0 if 'calctree/VERSION' in n else 'calctree/VERSION missing from the zip')"

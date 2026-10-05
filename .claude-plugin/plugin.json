@@ -2,7 +2,7 @@
   "name": "calctree",
   "displayName": "CalcTree",
   "description": "Build and read CalcTree engineering calculation pages programmatically: create pages, insert MDX with live formulas, read computed values back with real units, and link pages together.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "CalcTree",
     "url": "https://www.calctree.com"

@@ -22,6 +22,8 @@ import os
 import sys
 import zipfile
 
+from release_info import check as check_versions
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_SKILL = "calctree"
 
@@ -29,6 +31,7 @@ DEFAULT_SKILL = "calctree"
 # direction for a repo that also holds working notes.
 INCLUDE = [
     "SKILL.md",
+    "VERSION",
     "REFERENCE.md",
     "scripts/calctree_api.py",
     "examples/smoke_two_page.py",
@@ -49,6 +52,12 @@ def build(skill: str, out_dir: str) -> str:
     head = open(os.path.join(src, "SKILL.md"), encoding="utf-8").read(4096)
     if not head.startswith("---") or "name:" not in head or "description:" not in head:
         sys.exit("SKILL.md needs YAML frontmatter with 'name' and 'description'")
+
+    # VERSION ships so the skill can compare itself with the copy on main. It must
+    # match plugin.json, or the update check would nag about a version that is not out.
+    if skill == DEFAULT_SKILL:
+        version = check_versions(skill)
+        print(f"version {version}")
 
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, f"{skill}.zip")
