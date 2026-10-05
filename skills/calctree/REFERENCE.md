@@ -22,7 +22,8 @@ the key before debugging anything else.
 - Reads: `pages`, `page` + `pageContent`, `calculation`, `pageMDX`
 - Writes: `createPageSync`, `addPageNode`, `insertMDXContent`, `createOrUpdateCalculation`, `deletePage`
 - Statement titles, and the two traps
-- Cross-page references
+- Templates: `workspaceTemplates`, `pageTemplates`, `workspaceTemplate`, `workspaceTemplateVersion(s)`
+- Cross-page references: live `<PageReference>`, and the `__ct_meta` snapshot
 - In-place edits
 
 ## Execute: simpleCalculate
@@ -194,6 +195,7 @@ mutation($workspaceId: ID!, $pageId: ID!, $content: String!, $position: Location
   insertMDXContent(workspaceId: $workspaceId, pageId: $pageId, content: $content, position: $position) {
     insertedCount
     statementsCreated
+    warnings
   }
 }
 ```
@@ -213,6 +215,15 @@ tripwire.
 Prose and calculation blocks both go through here, and the statements **do** evaluate
 server-side. A separate `createOrUpdateCalculation` is not needed to make a page
 compute.
+
+**`warnings` must be empty.** It lists what the insert skipped. Today that means only
+`<PageReference>` tags the server refused (template not visible here, never
+published, unknown version). Such a block is still placed but creates no statement,
+so a non-empty `warnings` together with a lower `statementsCreated` is a failure.
+
+If the MDX deserialises to **no body nodes at all** (for example, only `<Python>`
+blocks), the server returns `0/0` and writes no statements. Include a heading or
+paragraph.
 
 ### createOrUpdateCalculation
 
@@ -319,9 +330,115 @@ against the dataset.
 automatically. No separate `createOrUpdateCalculation` call is needed for titles.
 Verified on prod 2026-08-24.
 
+## Templates
+
+All of these are reads, and an API key reaches them as a member of the workspace. **There is
+no template search query.** Page through `workspaceTemplates` and filter on `name`,
+`description` and `tags` yourself.
+
+### workspaceTemplates: list what this workspace can see
+
+The workspace's own templates plus every built-in, with deleted ones excluded, in `id` order.
+
+```graphql
+query($workspaceId: ID!, $first: Int, $after: ID) {
+  workspaceTemplates(workspaceId: $workspaceId, first: $first, after: $after) {
+    id name description tags source sourceId latestVersionId
+    workspace { id }
+  }
+}
+```
+
+```json
+{"workspaceId": "<ws>", "first": 100}
+```
+
+To page, pass the last row's `id` as `after`, and **keep going until a page comes back
+empty**. `first` is capped at 100 server-side, so a short page does not mean you have reached
+the end. Leave `content` out of the selection while listing, because every row carries its
+full MDX.
+
+- `workspace` is null for a built-in. Use it to tell built-ins apart, not `source`.
+- `latestVersionId` null means the template has never been published, so it **cannot be
+  referenced** through the API (see below).
+
+### pageTemplates: templates saved from a known page
+
+When you have a page id and want the `templateId` a `<PageReference>` needs:
+
+```graphql
+query($workspaceId: ID!, $pageId: ID!) {
+  pageTemplates(workspaceId: $workspaceId, pageId: $pageId) {
+    templateId name latestVersion latestVersionId
+    workspace { id }
+  }
+}
+```
+
+Lists the workspace's own templates first, then built-ins. `latestVersion` is the number
+to write as `templateVersion`, and null means never published. An empty list means the page
+was never saved as a template, or is not a live page in this workspace.
+
+### workspaceTemplate, workspaceTemplateVersion, workspaceTemplateVersions
+
+```graphql
+query($workspaceId: ID!, $id: ID!) {
+  workspaceTemplate(workspaceId: $workspaceId, id: $id) {
+    id name description tags sourceId latestVersionId workspace { id }
+  }
+}
+```
+
+```graphql
+query($workspaceId: ID!, $id: ID!) {
+  workspaceTemplateVersion(workspaceId: $workspaceId, id: $id) {
+    id templateId version nameAtPublish calculationId revisionId content
+  }
+}
+```
+
+```graphql
+query($workspaceId: ID!, $templateId: ID!) {
+  workspaceTemplateVersions(workspaceId: $workspaceId, templateId: $templateId, first: 20) {
+    id version nameAtPublish createdAt
+  }
+}
+```
+
+- `workspaceTemplate` returns null for a template in another workspace, one that does not
+  exist, or one that was deleted.
+- A version's `content` is the published MDX. It is what you copy when you want an editable
+  copy rather than a reference. Fetch it by `latestVersionId`, not from
+  `workspaceTemplate.content`, which can drift from what was published.
+- A version's `calculationId` and `revisionId` are the exact calculation a reference pins.
+  Pass them to the `calculation` query to read its input names and outputs.
+- Versions are newest first, capped at 100.
+
 ## Cross-page references
 
-A reference is a point-in-time snapshot of the source page's computed values,
+### Live: `<PageReference>` through insertMDXContent
+
+```
+<PageReference name="Beam check" codeTitle="Beam_Check" templateId="<templateId>">
+<Input name="L" value="span" />
+<Input name="w" value="udl * 1.5" />
+</PageReference>
+```
+
+When you insert, the server resolves the template to a pinned `(calculationId,
+revisionId)` and creates a `calcSource` statement. Outputs are read downstream as
+`Beam_Check.<output>`. It resolves only:
+
+- a template visible to this workspace (its own, or a built-in) that is backed by a page,
+- at its latest **published** version, or at `templateVersion="3"`/`"v3"` if you give one.
+
+A template that was never published, an unparseable or unknown version, a missing template
+or one with no source page each produce a `warnings` entry and no statement. A tag with no
+`templateId` is dropped outright. The server applies no feature flag to this path.
+
+### Snapshot: the `__ct_meta` object
+
+A snapshot is a point-in-time copy of the source page's computed values,
 written onto the target page as a `multiline_mathjs` statement whose object carries
 a metadata key:
 
