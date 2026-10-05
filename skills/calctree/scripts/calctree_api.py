@@ -767,6 +767,35 @@ def _print_statements(statements: list[dict]) -> None:
             print(f"      ERRORS: {s['errors']}")
 
 
+SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REMOTE_VERSION_URL = ("https://raw.githubusercontent.com/calctree/calctree-skills/"
+                      "main/skills/calctree/VERSION")
+DOWNLOAD_URL = ("https://github.com/calctree/calctree-skills/releases/latest/"
+                "download/calctree.zip")
+
+
+def local_version() -> str | None:
+    try:
+        with open(os.path.join(SKILL_DIR, "VERSION"), encoding="utf-8") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+def remote_version(timeout: float = 5) -> str | None:
+    """The version on main, or None if the fetch fails. Many sandboxes allowlist only
+    calctree.com hosts, so a failure here is normal and never worth retrying."""
+    try:
+        with urllib.request.urlopen(REMOTE_VERSION_URL, timeout=timeout) as res:
+            return res.read(64).decode("utf-8", "replace").strip() or None
+    except Exception:
+        return None
+
+
+def _version_tuple(v: str) -> tuple[int, ...]:
+    return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
+
+
 USAGE = """usage: python3 calctree_api.py <command> [args]
 
   pages       <workspaceId>
@@ -783,8 +812,9 @@ USAGE = """usage: python3 calctree_api.py <command> [args]
   page-templates <workspaceId> <pageId>             templates saved from a page
   pdf         <workspaceId> <pageId> [title] [fileName]  generate PDF report
   delete      <workspaceId> <pageId>                 soft delete
+  version                                            local and latest skill version
 
-'-' reads the MDX from stdin. Requires CALCTREE_API_KEY."""
+'-' reads the MDX from stdin. Requires CALCTREE_API_KEY (except version)."""
 
 
 def _read_mdx(path: str) -> str:
@@ -885,6 +915,13 @@ def main(argv: list[str]) -> int:
         elif cmd == "delete":
             delete_page(args[0], args[1])
             print("deleted (soft)")
+        elif cmd == "version":
+            local, remote = local_version(), remote_version()
+            print(f"local:  {local or 'unknown'}")
+            print(f"latest: {remote or 'unavailable (fetch failed or blocked)'}")
+            if local and remote and _version_tuple(remote) > _version_tuple(local):
+                print(f"update available: {DOWNLOAD_URL}")
+                print("Claude Code: /plugin marketplace update calctree")
         else:
             print(USAGE)
             return 2
