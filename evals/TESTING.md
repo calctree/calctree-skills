@@ -120,6 +120,26 @@ create real pages, so point them at a workspace you don't mind writing to. The t
 template prompts need a published page-backed template in the workspace (a beam
 check and a retaining wall).
 
+## Update check
+
+Manual, once per release. Needs a surface with network access to
+`raw.githubusercontent.com` and `graph.calctree.com`.
+
+1. Install a copy whose `VERSION` is lower than the one on main (edit `VERSION` in a local
+   copy to `0.0.1`).
+2. Ask it to list the pages in a workspace. Expect **one** line saying a newer version is
+   available, with the zip link and `/plugin marketplace update calctree`, then the page list.
+3. Ask a second CalcTree question in the same conversation. Expect no repeat of the notice.
+4. In a fresh conversation, ask only "what is the CalcTree skill?". Expect no fetch and no
+   notice.
+5. On a surface that blocks `raw.githubusercontent.com` (claude.ai with only calctree.com
+   allowlisted), ask the step 2 question again. Expect no mention of the check, no retry,
+   and the page list as normal.
+6. With `VERSION` equal to main, expect no notice at all.
+
+`python3 skills/calctree/scripts/calctree_api.py version` prints both versions, for
+checking the fetch outside a conversation.
+
 ## What to check
 
 For every test, regardless of model:

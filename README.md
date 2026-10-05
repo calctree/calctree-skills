@@ -10,6 +10,7 @@ in a workspace, execute them with custom inputs, and build new ones.
 ```
 skills/calctree/
   SKILL.md                    the skill: read this first
+  VERSION                     the skill's version, shipped in the zip
   REFERENCE.md                every GraphQL document, for driving it without our code
   scripts/calctree_api.py     the primitives: stdlib only, importable and a CLI
   examples/smoke_two_page.py  end-to-end example
@@ -18,7 +19,8 @@ tools/package_skill.py        builds the distributable zip
 AGENTS.md                     entry point for agent tools that look for it
 evals/                        evaluation scenarios
 llms.txt                      machine-readable index
-CONTRIBUTING.md               release testing
+CHANGELOG.md                  what changed in each release
+CONTRIBUTING.md               versioning and release testing
 ```
 
 
@@ -42,7 +44,7 @@ python3 skills/calctree/examples/smoke_two_page.py <workspaceId>
 | Surface | How |
 |---|---|
 | Claude Code | `/plugin marketplace add calctree/calctree-skills` then `/plugin install calctree@calctree`, or copy the skill folder into `~/.claude/skills/` |
-| claude.ai, desktop, Cowork | `python3 tools/package_skill.py`, then upload `dist/*.zip` under Settings > Features |
+| claude.ai, desktop, Cowork | download [calctree.zip](https://github.com/calctree/calctree-skills/releases/latest/download/calctree.zip) (or build it with `python3 tools/package_skill.py`), then upload it under Settings > Features |
 | Claude API | the same zip via `POST /v1/skills`. Note that surface has no network access, so only the guidance is usable there, not the write path |
 | Cursor, Codex, other agent tools | point them at `AGENTS.md` |
 
@@ -59,6 +61,14 @@ Four things that catch everyone out, all covered in the skill:
    you may read zero statements.
 4. **An invalid API key does not say so.** It comes back as a GraphQL `"Unexpected error."`
    with no 401 and no mention of auth.
+
+## Updates
+
+Each version is a numbered GitHub release, listed in [CHANGELOG.md](CHANGELOG.md). The
+download link above always points at the newest one. To be told about new versions, use
+**Watch > Custom > Releases** on this repo. In Claude Code, `/plugin marketplace update
+calctree` pulls the latest. The skill also checks for a newer version itself, once per
+conversation, when it already has network access.
 
 ## Contributing
 

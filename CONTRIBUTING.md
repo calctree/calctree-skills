@@ -1,5 +1,28 @@
 # Contributing
 
+## Versioning and releases
+
+**Bump the version and add a CHANGELOG entry for any change users should pick up.** A
+change that only touches evals, CI or internal notes does not need one.
+
+1. Set the same version in `.claude-plugin/plugin.json` and `skills/calctree/VERSION`. CI
+   (`check-version.yml`) fails if they disagree. Use semver: patch for fixes, minor for
+   new guidance or commands, major for anything that breaks an existing workflow.
+2. Add a `## <version>` section at the top of `CHANGELOG.md`: a short, user-facing summary.
+   It becomes the release notes. Without it the release falls back to GitHub's generated
+   notes.
+3. Merge to main. `release-skill.yml` creates release `v<version>`, attaches `calctree.zip`
+   and marks it latest. If the tag already exists it skips, so a push without a bump
+   releases nothing.
+
+The stable download link is
+`https://github.com/calctree/calctree-skills/releases/latest/download/calctree.zip`, which
+always resolves to the release marked latest. Link to that, never to a specific tag.
+
+Anyone who wants to hear about new versions can use **Watch > Custom > Releases** on the
+repo, which notifies on releases only. The skill also tells its user, once per conversation,
+when `VERSION` on main is newer than its own (see `evals/TESTING.md`).
+
 ## Release testing
 
 Four things have to hold: it installs, it runs on a clean machine, a model actually uses it
@@ -33,7 +56,7 @@ python3 skills/calctree/scripts/calctree_api.py context <workspaceId> <pageId>
 |---|---|---|
 | Claude Code, plugin | `/plugin marketplace add .` then `/plugin install calctree@calctree` | the skill triggers on a CalcTree request. **Untested — the `"source": "./"` layout has never been verified** |
 | Claude Code, manual | copy the skill folder into `~/.claude/skills/` | same |
-| claude.ai, desktop, Cowork | `python3 tools/package_skill.py`, upload `dist/*.zip` under Settings > Features | upload accepted (rejects files loose at the zip root), and a write succeeds — needs network access enabled for the sandbox |
+| claude.ai, desktop, Cowork | `python3 tools/package_skill.py`, upload `dist/*.zip` under Settings > Features (the zip must contain `calctree/VERSION`) | upload accepted (rejects files loose at the zip root), and a write succeeds — needs network access enabled for the sandbox |
 | Claude API | the same zip via `POST /v1/skills` | guidance loads. Writes **cannot** work there: that sandbox has no network |
 | Cursor, Codex, other agent tools | point them at `AGENTS.md` | they follow it to `SKILL.md` and drive the API |
 
