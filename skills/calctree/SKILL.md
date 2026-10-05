@@ -292,9 +292,16 @@ Two calls, in order:
    exists but is not in the tree is orphaned and invisible in the UI. Client-minted ids are
    accepted; platform-generated ids are 21-character nanoids.
 2. **`insertMDXContent(workspaceId, pageId, mdx, position)`** returns
-   `{insertedCount, statementsCreated}`. Prose and inline calculation blocks both go through
-   here. Always check `statementsCreated` matches what you sent. Statement titles from the
-   MDX `name` attribute are now set automatically.
+   `{insertedCount, statementsCreated, warnings}`. Prose and inline calculation blocks both go
+   through here. Always check `statementsCreated` matches what you sent, and that `warnings`
+   is empty: a `<PageReference>` the server cannot resolve is skipped with a warning rather
+   than failing the insert (§ 11). Statement titles from the MDX `name` attribute are set
+   automatically.
+
+**An MDX payload made only of side-effect tags creates nothing.** `<Python>` (and
+`<Dataset>`, `<PageSettings>`) produce no body node. If nothing else in the payload produces
+one, the server returns `0/0` before it writes any statements. Send at least one heading,
+paragraph or block with them. A chart's image mention does the job.
 
 For calculation-graph-only writes with no body node, use
 `createOrUpdateCalculation(workspaceId, pageId, statements[])`, where each statement is
@@ -309,6 +316,25 @@ https://app.calctree.com/edit/<workspaceId>/<pageId>
 ```
 
 Do NOT use `/pages/` — that route does not exist. The correct path is `/edit/{workspaceId}/{pageId}`.
+
+### Engineering integrity
+
+A calculation page is engineering work with real consequences. Treat what you write as a draft
+the engineer will check:
+
+- **Never invent a clause number, a standard's edition, a material property, a capacity or
+  safety factor, or a load value.** A plausible fabricated reference is worse than saying you
+  are unsure.
+- Cite a standard as body plus number (`EN 1992-1-1`, `AS 3600`, `ACI 318`). Add the year only
+  when the user gave it or you have confirmed it.
+- Keep what is established apart from what is assumed. Flag every assumption in the page
+  prose so the engineer can check it.
+- For a code parameter you cannot ground, use a conservative placeholder, labelled on the page
+  as one to confirm against the governing code. Never use a confident-looking made-up value.
+- Match the standard to the jurisdiction (Eurocodes for EU and UK, ASCE/ACI/AISC for the US,
+  AS/NZS for Australia and New Zealand), and say which one you assumed.
+- The engineer stays responsible. Nothing you generate replaces engineering judgement or the
+  governing code.
 
 ## 4. Generating PDF reports
 
@@ -415,7 +441,9 @@ If `calctree_api.py` is available:
 
 Pages are written in an MDX-based format (Markdown with embedded calculation components).
 Users don't need to know this — they describe what they want computed and you generate
-the page content. Here are the calculation components:
+the page content. `insertMDXContent` parses it on the server with the same deserialiser the
+in-app editor uses. Every block-level tag starts on its own line with a blank line before
+and after it. Here are the calculation components:
 
 Single assignment, self-closing:
 
@@ -435,7 +463,170 @@ M_max = load * span^2 / 8
 </EquationBlock>
 ```
 
+Always use the fenced form. The old `formula='...'` attribute on `EquationBlock` is still
+accepted so that legacy templates keep working, but do not write it.
+
 No H1 in the body: the page title already renders as the heading.
+
+### Mentions
+
+A mention shows a live value, image or chip in the body. It is a markdown link whose target
+starts with `mention:variable:`. The variable key comes next, then comma-separated
+`key="value"` options, with no spaces:
+
+```
+[M_max](mention:variable:M_max)
+[Moment diagram](mention:variable:beam1:variableType="image")
+[f_y](mention:variable:f_y:showValue="false")
+```
+
+Options: `showTitle` and `showValue` (`"true"` or `"false"`), `variableType` (`"image"` for a
+chart, `"trafficlights"`, `"number"`, `"string"`), plus the `format`/`decimal` pair described
+in § 8. If the display text has underscores, escape them (`M\_max`) but leave the key as it
+is. The old `<Mention key=... />` JSX tag still imports, but write the link form.
+
+### Python: out-of-line block, inline cell
+
+**`<Python>`** creates the classic Python statement. It opens in its own tab, and nothing
+appears in the page body. Through `insertMDXContent` it is the only way to create one from
+MDX. The in-app AI uses a dedicated tool instead, which is why its rules say never to write
+the tag. The other way is `createOrUpdateCalculation` with `engine: "python"`. Put the code in
+a bare fence and give the block a `name`:
+
+```
+<Python name="Moment diagram">
+```
+ctconfig.plot_prefix = "beam"
+...
+plt.show()
+```
+</Python>
+```
+
+**`<PythonCell>`** is the same engine with the code shown inline in the page body, like a
+notebook cell. Same shape: `name` attribute, code in a fence. Its plots render directly
+beneath the cell without an image mention. Use it only when the user wants the code on the
+page. Otherwise use `<Python>`.
+
+### SolveBlock: solve for an unknown
+
+Use `<SolveBlock>` only when a value has to satisfy constraints and cannot simply be
+rearranged into an `Assignment`. Put one equation or bound per line inside a bare fence:
+
+```
+<SolveBlock name="Required second moment" mode="find" unknowns="I_req:mm^4">
+```
+5 * w_udl * span^4 / (384 * E_mod * I_req) = span / 250
+I_req > 0 mm^4
+```
+</SolveBlock>
+```
+
+- `mode` is `"find"` (exact, the default) or `"minerr"` (least-squares best fit). Never
+  `"exact"` or `"best-fit"`.
+- `unknowns` is a comma-separated list of `name` or `name:unit`.
+- Every other identifier must already be defined on the page. A solved unknown is available
+  downstream under its bare name.
+- The server compiles the solve program when you insert. If the equations do not compile,
+  the block is inserted with an empty program and **no error comes back**. Check the
+  `calculation` query for the unknown's value.
+
+### Toggles and columns
+
+A collapsible section is `<details>` with `<summary>` as its first child. There is no
+`<toggle>` tag: it does not deserialise, and the whole section is lost.
+
+```
+<details data-heading="h3" open>
+<summary>Assumptions</summary>
+
+Content, including EquationBlocks and tables.
+
+</details>
+```
+
+`data-heading` (`h1` to `h6`) is optional, and so is the bare `open` attribute (never
+`open={true}`).
+
+Columns are lowercase `<column_group>` and `<column>`. Put each opening and closing tag on
+its own line, with blank lines around the content inside each column:
+
+```
+<column_group>
+<column>
+
+Left content
+
+</column>
+<column>
+
+Right content
+
+</column>
+</column_group>
+```
+
+### Tables
+
+- **GFM pipe table** for static values with at most one header row.
+- **`<RichTable>`** when cells hold live mentions or components, or when the table has a
+  header column, merged cells (`<Td colSpan={2}>`, `<Td rowSpan={3}>`) or set widths
+  (`<RichTable colSizes={[180,120]}>`). Use `<Th>` for every header cell, including the first
+  cell of each body row in a header-column table. Never fake a header with bold text in a
+  `<Td>`. No `<p>` wrapper inside cells.
+- **`<InputTable name="...">`** for an editable grid of plain text or numbers only. It needs
+  `name`, or the whole table is dropped. Components in its `<Td>` cells are not supported.
+
+**Each table tag goes on its own line, or the rows are silently dropped.** `<RichTable>`,
+`<InputTable>`, every `<Tr>` and `</Tr>`, and the closing tag each need their own line. In a
+`RichTable`, leave a blank line between rows and between cells. If the table is crammed onto
+one line, the tags become inline markdown and the table comes back empty. `<column_group>`
+fails the same way.
+
+```
+<RichTable>
+<Tr>
+<Th>
+Check
+</Th>
+
+<Th>
+Utilisation
+</Th>
+</Tr>
+
+<Tr>
+<Th>
+Bending
+</Th>
+
+<Td>
+[util_r](mention:variable:util_r)
+</Td>
+</Tr>
+</RichTable>
+```
+
+### Deprecated tags: never write these
+
+They still import so that old templates keep working, but they go through a legacy reader
+that drops content:
+
+| Never write | Write instead |
+|---|---|
+| `<Columns>` / `<Column>` | `<column_group>` / `<column>` |
+| `<Table>` | `<RichTable>`, or a GFM pipe table |
+| `<Paragraph>` | a plain paragraph |
+| `<Toggle>` (or `<toggle>`) | `<details>` with `<summary>` |
+| `<Mention>` | a `mention:variable:` link |
+| `<InlineEquation>` | `$…$` LaTeX |
+| `<Image>` | a markdown image |
+| `<EquationBlock formula='...' />` | `<EquationBlock>` with a fenced body |
+
+Also never write `<Block>` or `<Selection>`.
+
+LaTeX (`$...$`, `$$...$$`) is for display only and does not compute. Anything that has to
+compute goes in an `Assignment`, `EquationBlock`, Python block or `SolveBlock`.
 
 ## 6. Reading back and verifying
 
@@ -457,6 +648,14 @@ Same engine as the in-app editor:
 - Units on inputs (`load = 5 kN`); calculated values inherit them, so do not re-declare.
 - `equalText()` for string comparison, not `==`. Word operators: `and`, `or`, `xor`, `not`.
 - Double-quote strings.
+- **Names contain only letters, digits and underscores. No apostrophes:** `f'c = 32 MPa`
+  fails with "Invalid left-hand side". Write `f_c`.
+- **No currency units.** MathJS has no `USD`, `AUD` or `EUR`. Use a plain number, and put
+  the currency in the name or the prose (`cost_aud = 50000`).
+- **Pick the unit system from the governing code's jurisdiction.** An explicit request from
+  the user comes first. Then AS/NZS, Eurocodes, ISO, BS and CSA mean SI (`m`, `mm`, `kN`,
+  `MPa`, `kPa`), and US codes (ASCE 7, ACI 318, AISC 360, IBC) mean US customary (`ft`, `in`,
+  `lbf`, `psi`, `ksi`, `psf`). Use one system for the whole page. Do not mix `kN` and `kip`.
 - **CalcTree is unit-aware**: values carry real physical units through every calculation, and
   unit conversions happen automatically. You can name a variable after a unit token and it
   works naturally — `m = 4 m` defines a variable `m` with value 4 metres, and `y = 4 * m`
@@ -512,19 +711,27 @@ bite:
   `check = util <= 1 ? "PASS" : "FAIL"` is always truthy, so a traffic-light chip renders
   green whatever the result. Write `within_limits = util <= 1` and name the variable so it
   reads as the verdict.
-- **Mentions are display-only, and carry no formatting attributes.** Do the rounding in
-  MathJS. Put no `format` and no `decimal` on a mention: `format` is dropped on import,
-  and `decimal` without it renders the value at 0 decimal places, so `1.08` with
-  `decimal="2"` prints `1` and `0.05` with `decimal="4"` prints `0` — a wrong number, not
-  a formatting nit. A bare mention of a rounded value renders exactly as rounded.
+- **Mentions are display-only. Round in MathJS and mention the rounded value bare.** A bare
+  mention of a rounded value renders exactly as rounded. That is the default.
+  - If you need a fixed precision on the mention itself, write all three options:
+    `[util](mention:variable:util:format="number",decimal="3",variableType="number")`.
+    `format="number"` makes `decimal` mean fixed decimal places. Without `variableType`, the
+    options are lost when the page is read back as MDX, though they render.
+  - **Never write `decimal` without an explicit `format` of `number`, `currency`,
+    `percentage` or `number-thousand-separator`.** With no format, or `format="general"`,
+    `decimal` is not a count of decimal places: `1.08` with `decimal="2"` prints `1`, and
+    `0.05` with `decimal="4"` prints `0`. That is a wrong number, not a formatting nit.
 - **A name-only mention (`showValue="false"`) is a block element.** Never wrap one in
-  text: `Yield strength (<Mention .../>)` renders as three lines with a stranded `)`.
+  text: `Yield strength ([f_y](mention:variable:f_y:showValue="false"))` renders as three
+  lines with a stranded `)`.
   Give the symbol its own table column, and use inline LaTeX for notation in prose. A mention of a variable the page never defines renders as the word `undefined`
   and no check will catch it, so every mention key must resolve. Text placed immediately
   after a mention inside a table cell is dropped: put the unit in a separate column.
 - **Charts** need four things together or you get an untitled node and no image: a named
   Python block, a bare fence rather than a language-tagged one, a plot prefix set before
-  `plt.show()`, and an image mention immediately above the block. Any name that renders as a
+  `plt.show()`, and an image mention immediately above the block
+  (`[Moment diagram](mention:variable:beam1:variableType="image")`). A `<PythonCell>` needs
+  none of that mention wiring, because its plots render beneath it. Any name that renders as a
   label needs a leading underscore and underscores between words; hyphens render as minus
   signs and literal spaces are dropped.
 - **Escape `<` and `>` as `&lt;` and `&gt;` everywhere**, prose included. A raw one truncates
@@ -584,19 +791,95 @@ Calculation content is MDX. The components you will actually use:
 |---|---|
 | `<Assignment>` | one named formula |
 | `<EquationBlock>` | several formulas in one block |
-| `<Python>` | a Python statement, needs a `name` or the node shows as "Untitled" |
-| `<Mention>` | display a computed value, an image, or a traffic-light chip |
+| `<Python>` | an out-of-line Python statement, needs a `name` or the node shows as "Untitled" |
+| `<PythonCell>` | the same Python engine, with the code shown inline in the body |
+| `<SolveBlock>` | solve equations or inequalities for declared unknowns |
+| `[text](mention:variable:KEY)` | display a computed value, an image, or a traffic-light chip |
 | `<TrafficLights>` | the pass/fail chip, driven by a named boolean |
 | `<MatrixBlock>` | matrix input and output |
 | `<SimpleInput>`, `<SelectInput>`, `<RadioInput>` | interactive inputs |
-| `<RichTable>` | a table whose cells hold components; plain GFM pipe tables otherwise |
+| `<RichTable>` | a table whose cells hold components, or with header columns or merged cells; plain GFM pipe tables otherwise |
+| `<InputTable>` | an editable grid of primitive values |
+| `<details>` / `<summary>` | a collapsible section |
+| `<column_group>` / `<column>` | side-by-side columns |
+| `<PageReference>` | a live reference to a published template (§ 11) |
+
+Syntax and the traps for each are in § 5.
 
 ## 11. Linking pages
 
-A cross-page reference is a snapshot of the source page's computed values, created as a
-`multiline_mathjs` statement whose object carries a metadata key alongside the values. That
-metadata key is what makes it a source-linked page reference rather than a plain block.
-Summary and roll-up pages should **reference** upstream results, not recompute them.
+Summary and roll-up pages should **reference** upstream results, not recompute them. There
+are three ways to reuse another calculation. Pick one before you write anything:
+
+| Want | Use | What you get |
+|---|---|---|
+| Use a published calculation as-is, driven by this page's values | **`<PageReference>`** (live template reference) | The template's calculation executes at a pinned published version, with your inputs. Its results flow into this page as `codeTitle.output`. Its blocks are not copied and cannot be edited here |
+| Edit the calculation, keep only part of it, or start something new from it | **Copy** the template's MDX | An independent copy you own. Fetch the published version's `content` (REFERENCE.md) and insert it with `insertMDXContent` |
+| A frozen record of another page's current values, or a page that is not a published template | **`__ct_meta` snapshot** | Unitless point-in-time values. They do not recompute when the source changes |
+
+The default for "use the X template", "run our standard X check" or "reuse our X calc" is a
+live reference.
+
+### Live template references: `<PageReference>`
+
+A reference names a **template**, not a page. It carries no page id, revision id or workspace
+id. The server resolves those from the template when you insert. This path is checked against
+the server code but has not yet had a live end-to-end run through the skill, so verify every
+insert as step 4 describes.
+
+**1. Find the template.** The API has no template search. Page through `workspaceTemplates`
+(the workspace's own templates plus every built-in, with deleted ones excluded) and match on
+`name`, `description` and `tags` yourself. If you already know the source page, use
+`pageTemplates(workspaceId, pageId)` instead. Both queries are in REFERENCE.md. A template
+whose `latestVersionId` (or `latestVersion`) is null has never been published, so **it cannot
+be referenced through the API**. The in-app editor can fall back to the page's current state.
+The server cannot, and refuses it. Copy its content instead, or ask the user to publish it
+from the templates panel. Use a template id the user gave you or a query returned. Never
+invent one or recall one from memory.
+
+If `calctree_api.py` is available, run `python3 calctree_api.py templates <workspaceId> beam`
+or `page-templates <workspaceId> <pageId>`.
+
+**2. Learn its input names.** Each `<Input name>` is the input's name **on the referenced
+page**. Read the formulas of the published version with the `calculation` query, using the
+version's own `calculationId` and `revisionId` from `workspaceTemplateVersion`. If that is
+refused (a built-in's source page lives in another workspace), read the version's `content`
+MDX instead.
+
+**3. Write the tag.** Put the opening tag on its own line with a blank line before and after.
+Give each `<Input>` its own line, with no blank lines inside:
+
+```
+<PageReference name="Beam check" codeTitle="Beam_Check" templateId="<id from the query>">
+<Input name="L" value="span" />
+<Input name="w" value="udl * 1.5" />
+</PageReference>
+
+<Assignment name="Utilisation" formula='util = Beam_Check.M_star / Beam_Check.M_capacity' />
+```
+
+- `templateId`: required. Without it the tag is dropped entirely.
+- `codeTitle`: the identifier its outputs are read through (`Beam_Check.M_star`). The usual
+  naming rules apply. If it is missing, `name` is used. It must not clash with a name already
+  in scope, and two references to the same template need different `codeTitle`s.
+- `templateVersion`: optional. Leave it out to pin the latest published version. Write it
+  only when the user names one, as `3` or `v3`. Anything else is refused. It is not read as
+  "latest".
+- `hidePageTitle="true"`: optional.
+- `<Input value>` is a MathJS expression evaluated in **this** page's scope: a variable, an
+  expression, or a literal with units (`"5 m"`). Omit an input to run it on the template's
+  own published value. A blank `value` is dropped. To avoid escaping questions, keep
+  comparison operators out of `value`: compute the expression in an `Assignment` first and
+  map that variable.
+
+**4. Verify.** `warnings` must be empty. A refused reference still places the block, but it
+creates no statement, renders nothing and returns a reason in `warnings`. Examples: a template
+not visible to this workspace, one with no source page, one never published, or a version
+that does not exist. Then read the page with the `calculation` query. The reference's
+statement has engine `calcSource`. Check that the `codeTitle.*` values downstream are not
+null. Never edit a `calcSource` statement's JSON formula with `createOrUpdateCalculation`.
+To change a reference's inputs, rebuild the page (§ 14). A second tag added alongside the
+first leaves both live.
 
 ### Structuring a library of calculations
 
@@ -619,24 +902,32 @@ Two consequences worth planning for:
   factors and recompute the same design values internally. It works, and it means a change to a
   material rule has to be made in as many places as you have checks.
 
-### Creating cross-page references
+### Snapshots: the `__ct_meta` object
 
-There are two ways to create a cross-page reference:
+A snapshot copies the source page's computed values into a `multiline_mathjs` statement whose
+object carries a metadata key alongside the values. That metadata key is what makes it a
+source-linked page reference rather than a plain block. Use it when the source is an ordinary
+page rather than a published template, when you want a deliberately frozen record, or for
+quick wiring inside a library you are building. Remember that it does not update.
+
+### Creating snapshots
+
+There are two ways to create a snapshot:
 
 **Via `reference_page_via_api`** (the programmatic path): reads the source page's live values
 and writes a `multiline_mathjs` statement on the target page. Best for scripts that wire
 pages after creation.
 
 **Via MDX EquationBlock** (embedded in the page content during `insertMDXContent`): place the
-import formula directly in an EquationBlock. The formula is the same either way — an object
-literal with a `__ct_meta` key:
+import formula directly in an EquationBlock. The formula is the same either way, an object
+literal with a `__ct_meta` key. Keep it on one line:
 
 ```
-<EquationBlock
-  name="Cross-Page Imports"
-  title="Cross-Page Imports"
-  formula='ref_params = { HP_motor: 25, n_chains: 5, __ct_meta: { sourcePageId: "abc123", sourcePageTitle: "Project Parameters", importedAt: "2026-08-19T00:00:00Z" } }'
-/>
+<EquationBlock name="Cross-Page Imports">
+```
+ref_params = { HP_motor: 25, n_chains: 5, __ct_meta: { sourcePageId: "abc123", sourcePageTitle: "Project Parameters", importedAt: "2026-08-19T00:00:00Z" } }
+```
+</EquationBlock>
 ```
 
 Access imported values with dot notation: `HP = ref_params.HP_motor`.

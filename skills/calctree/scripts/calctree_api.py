@@ -272,9 +272,11 @@ def insert_mdx_content(workspace_id: str, page_id: str, mdx: str,
     make a page compute. Statement titles from the MDX `name` attribute are now set
     automatically (fixed on prod 2026-08-24).
 
-    Returns {insertedCount, statementsCreated}. ALWAYS check statementsCreated
-    against the number of blocks you sent: a write that persisted nothing is a
-    failure whatever the HTTP status said.
+    Returns {insertedCount, statementsCreated, warnings}. ALWAYS check
+    statementsCreated against the number of blocks you sent: a write that
+    persisted nothing is a failure whatever the HTTP status said. `warnings` lists
+    what was skipped, currently <PageReference> tags the server refused (template
+    not visible, never published, unknown version); it must be empty.
 
     `position` is a Slate location; the default prepends at [0]. To append, pass
     {"path": [<current top-level node count>]}.
@@ -282,13 +284,82 @@ def insert_mdx_content(workspace_id: str, page_id: str, mdx: str,
     d = gql(
         """mutation($workspaceId: ID!, $pageId: ID!, $content: String!, $position: LocationInput!){
              insertMDXContent(workspaceId: $workspaceId, pageId: $pageId, content: $content, position: $position){
-               insertedCount statementsCreated
+               insertedCount statementsCreated warnings
              }
            }""",
         {"workspaceId": workspace_id, "pageId": page_id, "content": mdx,
          "position": position or {"path": [0]}},
     )
     return d["insertMDXContent"]
+
+
+# ---- TEMPLATES ----
+
+def list_templates(workspace_id: str, keywords: list[str] | None = None) -> list[dict]:
+    """Every template this workspace can see (its own plus built-ins, deleted ones
+    excluded), optionally filtered client-side: a template matches when every
+    keyword appears in its name, description or tags. There is no server-side
+    search. Pages until an EMPTY page comes back: `first` is capped at 100
+    server-side, so a short page is not the end.
+
+    A template with latestVersionId None has never been published and cannot be
+    referenced with <PageReference> through the API.
+    """
+    out: list[dict] = []
+    after = None
+    while True:
+        d = gql(
+            """query($workspaceId: ID!, $first: Int, $after: ID){
+                 workspaceTemplates(workspaceId: $workspaceId, first: $first, after: $after){
+                   id name description tags source sourceId latestVersionId
+                   workspace { id }
+                 }
+               }""",
+            {"workspaceId": workspace_id, "first": 100, "after": after},
+        )
+        rows = d["workspaceTemplates"] or []
+        if not rows:
+            break
+        out.extend(rows)
+        after = rows[-1]["id"]
+    if keywords:
+        kws = [k.lower() for k in keywords]
+
+        def hay(t: dict) -> str:
+            return " ".join([t.get("name") or "", t.get("description") or "",
+                             " ".join(t.get("tags") or [])]).lower()
+        out = [t for t in out if all(k in hay(t) for k in kws)]
+    return out
+
+
+def page_templates(workspace_id: str, page_id: str) -> list[dict]:
+    """Templates saved from a page, each with its latest published version number.
+    How a caller that knows only a page id finds the templateId a <PageReference>
+    needs. latestVersion None means never published: not referenceable via API."""
+    d = gql(
+        """query($workspaceId: ID!, $pageId: ID!){
+             pageTemplates(workspaceId: $workspaceId, pageId: $pageId){
+               templateId name latestVersion latestVersionId workspace { id }
+             }
+           }""",
+        {"workspaceId": workspace_id, "pageId": page_id},
+    )
+    return d["pageTemplates"] or []
+
+
+def get_template_version(workspace_id: str, version_id: str) -> dict | None:
+    """One published version: its MDX `content` (what you copy) and the
+    calculationId/revisionId a reference pins (read them with the calculation
+    query to learn the template's input names)."""
+    d = gql(
+        """query($workspaceId: ID!, $id: ID!){
+             workspaceTemplateVersion(workspaceId: $workspaceId, id: $id){
+               id templateId version nameAtPublish calculationId revisionId content
+             }
+           }""",
+        {"workspaceId": workspace_id, "id": version_id},
+    )
+    return d["workspaceTemplateVersion"]
 
 
 # ---- CALCULATIONS ----
@@ -640,6 +711,10 @@ def build_page(workspace_id: str, title: str, mdx: str,
             f"insertMDXContent inserted {inserted['insertedCount']} node(s) but created 0 "
             "statements: the page will look correct and not compute"
         )
+    if inserted.get("warnings"):
+        raise CalcTreeError(
+            "insertMDXContent skipped part of the content: " + "; ".join(inserted["warnings"])
+        )
     time.sleep(2)  # settle before reading back
     ctx = get_page_context(workspace_id, page["id"])
     return {"page": page, "inserted": inserted,
@@ -704,6 +779,8 @@ USAGE = """usage: python3 calctree_api.py <command> [args]
   upload-csv  <workspaceId> <pageId> <file.csv>      upload a CSV dataset
   reference   <workspaceId> <targetPageId> <sourcePageId> [alias]
   audit       <workspaceId> <pageId>... | -   report statements left "Untitled Statement"
+  templates   <workspaceId> [keyword ...]            list templates (own + built-in)
+  page-templates <workspaceId> <pageId>             templates saved from a page
   pdf         <workspaceId> <pageId> [title] [fileName]  generate PDF report
   delete      <workspaceId> <pageId>                 soft delete
 
@@ -744,6 +821,10 @@ def main(argv: list[str]) -> int:
         elif cmd == "insert":
             r = insert_mdx_content(args[0], args[1], _read_mdx(args[2]))
             print(f"insertedCount={r['insertedCount']} statementsCreated={r['statementsCreated']}")
+            for w in r.get("warnings") or []:
+                print(f"WARNING: {w}", file=sys.stderr)
+            if r.get("warnings"):
+                return 1
             if r["statementsCreated"] == 0 and r["insertedCount"] > 0:
                 print("WARNING: nodes inserted but no statements created", file=sys.stderr)
                 return 1
@@ -784,6 +865,16 @@ def main(argv: list[str]) -> int:
             for f in r["affected"]:
                 print(f"  {f['untitled']}/{f['total']} untitled  {f['title']!r}\n    {f['url']}")
             return 1 if r["affected"] else 0
+        elif cmd == "templates":
+            for t in list_templates(args[0], args[1:]):
+                kind = "builtin" if not t.get("workspace") else "workspace"
+                pub = "published" if t.get("latestVersionId") else "NEVER PUBLISHED"
+                print(f"  {t['id']}  {t['name']!r}  [{kind}, {pub}]")
+        elif cmd == "page-templates":
+            for t in page_templates(args[0], args[1]):
+                v = t.get("latestVersion")
+                print(f"  {t['templateId']}  {t['name']!r}  "
+                      f"latestVersion={v if v is not None else 'NEVER PUBLISHED'}")
         elif cmd == "pdf":
             title = args[2] if len(args) > 2 else "Report"
             fname = args[3] if len(args) > 3 else "report"

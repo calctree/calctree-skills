@@ -39,7 +39,7 @@ python3 skills/calctree/scripts/calctree_api.py context <workspaceId> <pageId>
 
 ### 3. Behaviour
 
-Run the three scenarios in `evals/calctree-write-path.jsonl` and judge each against
+Run the scenarios in `evals/calctree-write-path.jsonl` and judge each against
 its `expected_behavior`. Then check the specific traps that have actually caused bad pages:
 
 - **Statement titles report `verified=True`.** The retry is load-bearing — roughly one run in
@@ -55,6 +55,8 @@ its `expected_behavior`. Then check the specific traps that have actually caused
 - **A pass/fail check is a named boolean**, never a string ternary.
 - **`<` and `>` are escaped** in prose as well as in formulas.
 - **Variables do not collide with unit abbreviations** (`M_max`, not `M`).
+- **A template reference resolves**: `insertMDXContent` returns empty `warnings`, and the
+  `codeTitle.*` values downstream are non-null.
 
 ### 4. Models
 

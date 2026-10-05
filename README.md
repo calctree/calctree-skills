@@ -16,7 +16,7 @@ skills/calctree/
 tools/package_skill.py        builds the distributable zip
 .claude-plugin/               Claude Code plugin + marketplace manifests
 AGENTS.md                     entry point for agent tools that look for it
-evals/                        three evaluation scenarios
+evals/                        evaluation scenarios
 llms.txt                      machine-readable index
 CONTRIBUTING.md               release testing
 ```

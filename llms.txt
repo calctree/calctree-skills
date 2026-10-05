@@ -10,7 +10,7 @@ Read the skill first. It covers the tool-use workflow (discover, introspect, exe
 
 ## Working code
 
-- [Primitives](skills/calctree/scripts/calctree_api.py): page listing, page-context reads, simpleCalculate (tool execution), page creation with tree registration, MDX content insert, calculation writes, CSV dataset uploads, cross-page references. Standard library only, importable or a CLI.
+- [Primitives](skills/calctree/scripts/calctree_api.py): page listing, page-context reads, simpleCalculate (tool execution), page creation with tree registration, MDX content insert, calculation writes, CSV dataset uploads, template listing, cross-page references. Standard library only, importable or a CLI.
 - [GraphQL reference](skills/calctree/REFERENCE.md): every operation with its variables and response shape, for driving the API without running our code.
 - [End-to-end example](skills/calctree/examples/smoke_two_page.py): creates two linked pages and reads the computed values back.
 

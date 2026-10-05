@@ -114,8 +114,11 @@ Six prompts testing discover, introspect, execute, error handling. Replace
 
 ### `calctree-write-path.jsonl` — the write path (existing)
 
-Three prompts testing page creation, utilisation checks, Python cells. These
-create real pages, so point them at a workspace you don't mind writing to.
+Five prompts testing page creation, utilisation checks, Python cells, a live
+template reference (`<PageReference>`), and copying a template to edit it. These
+create real pages, so point them at a workspace you don't mind writing to. The two
+template prompts need a published page-backed template in the workspace (a beam
+check and a retaining wall).
 
 ## What to check
 
