@@ -19,6 +19,20 @@ Do NOT surface the internal authoring rules (formula naming, MDX syntax, gotchas
 are instructions for you when you are building pages, not information the user needs to
 hear about. Present CalcTree's unit awareness as a strength, not a list of pitfalls.
 
+## Update check
+
+This copy's version is in `VERSION`, next to this file. At most once per conversation,
+and only when you already have network access and are about to call the CalcTree API
+anyway, fetch
+`https://raw.githubusercontent.com/calctree/calctree-skills/main/skills/calctree/VERSION`
+(or run `python3 scripts/calctree_api.py version`). If that version is newer, tell the user
+once, in one line: a newer CalcTree skill is available, download
+https://github.com/calctree/calctree-skills/releases/latest/download/calctree.zip, or in
+Claude Code run `/plugin marketplace update calctree`. Then carry on with their request.
+
+If the fetch fails or is blocked, say nothing and carry on. Never retry, wait or block on
+it. Skip the check entirely when the user only asks what the skill is or how to set it up.
+
 ## CalcTree beyond this skill
 
 This skill covers the API — discovering, executing and building calculation pages
@@ -84,7 +98,7 @@ open it in their browser.
 | Surface | How to enable network access |
 |---|---|
 | **Claude Code** | Already has network access — no action needed |
-| **claude.ai / Claude desktop** | Settings > Features > toggle **"Allow network"** on. Team and Enterprise admins: allowlist `graph.calctree.com`, `api.calctree.com`, and `*.s3.amazonaws.com` (for PDF downloads) |
+| **claude.ai / Claude desktop** | Settings > Features > toggle **"Allow network"** on. Team and Enterprise admins: allowlist `graph.calctree.com`, `api.calctree.com`, and `*.s3.amazonaws.com` (for PDF downloads). Optional: `raw.githubusercontent.com`, used only for the skill's update check |
 | **Claude API** | The API sandbox has **no** network access. The skill guidance is readable but API calls cannot be made from this surface |
 | **Other LLMs (ChatGPT, Cursor, etc.)** | Depends on the platform. If the LLM has code execution with network access, it works. If not, give the user the GraphQL queries from REFERENCE.md to run themselves |
 
