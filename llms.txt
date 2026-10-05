@@ -8,6 +8,11 @@ Read the skill first. It covers the tool-use workflow (discover, introspect, exe
 
 - [CalcTree skill](skills/calctree/SKILL.md): auth, using pages as tools, the write path, MDX calculation syntax, formula rules, and the authoring rules that decide whether a generated page reads correctly.
 
+## Install
+
+- [Skill zip](https://github.com/calctree/calctree-skills/releases/latest/download/calctree.zip): the latest release, for upload to claude.ai or the Claude desktop app. Claude Code: `/plugin marketplace add calctree/calctree-skills`.
+- [Changelog](CHANGELOG.md): what changed in each version.
+
 ## Working code
 
 - [Primitives](skills/calctree/scripts/calctree_api.py): page listing, page-context reads, simpleCalculate (tool execution), page creation with tree registration, MDX content insert, calculation writes, CSV dataset uploads, template listing, cross-page references. Standard library only, importable or a CLI.
