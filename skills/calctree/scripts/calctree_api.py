@@ -71,9 +71,11 @@ GQL_TIMEOUT_S = 90
 
 def gql(query: str, variables: dict, timeout: int = GQL_TIMEOUT_S) -> dict:
     body = json.dumps({"query": query, "variables": variables}).encode()
+    auth = _auth_headers()
+    using_key = "x-api-key" in auth
     req = urllib.request.Request(
         GRAPH_URL, data=body, method="POST",
-        headers={"Content-Type": "application/json", **_auth_headers()},
+        headers={"Content-Type": "application/json", **auth},
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as res:
@@ -86,19 +88,29 @@ def gql(query: str, variables: dict, timeout: int = GQL_TIMEOUT_S) -> dict:
         msg = "; ".join(e.get("message", "?") for e in errors)
         # An invalid or empty API key surfaces as a bare "Unexpected error." with no
         # 401 and no mention of auth, so name the likely cause instead of passing it on.
+        # Diagnose the credential that was actually sent.
         if re.search(r"unexpected error", msg, re.I):
-            raise CalcTreeError(
-                f"GraphQL: {msg} — this is what an invalid or empty CALCTREE_API_KEY "
-                "looks like; check the key before debugging anything else."
+            cause = (
+                "this is what an invalid or empty CALCTREE_API_KEY looks like; check "
+                "the key before debugging anything else."
+                if using_key else
+                "with CALCTREE_ACCESS_TOKEN set this can be an expired or invalid token "
+                "(they last 15 minutes); get a fresh one before debugging anything else."
             )
-        # insertMDXContent under x-api-key (CTP-4734): the page was created but the
-        # content write was refused. Say so, because retrying cannot help.
+            raise CalcTreeError(f"GraphQL: {msg} — {cause}")
+        # insertMDXContent under x-api-key (CTP-4734): the content write was refused.
+        # Say so, because retrying cannot help. This says nothing about whether the
+        # page exists, since this function also serves inserts into existing pages.
         if re.search(r"YJS authentication failed", msg, re.I):
-            raise CalcTreeError(
-                f"GraphQL: {msg} — an API key cannot write page content yet (CTP-4734). "
-                "Content writes need a user Bearer token: set CALCTREE_ACCESS_TOKEN, see "
-                "REFERENCE.md, 'Writing content: use a user token'."
+            cause = (
+                "an API key cannot write page content yet (CTP-4734). Content writes "
+                "need a user Bearer token: set CALCTREE_ACCESS_TOKEN, see REFERENCE.md, "
+                "'Writing content: use a user token'."
+                if using_key else
+                "CALCTREE_ACCESS_TOKEN was sent, so check that it has not expired "
+                "(15 minutes) and that its user can edit this workspace."
             )
+            raise CalcTreeError(f"GraphQL: {msg} — {cause}")
         raise CalcTreeError(f"GraphQL: {msg}")
     if "data" not in payload:
         raise CalcTreeError("GraphQL response carried no data")

@@ -146,7 +146,7 @@ checking the fetch outside a conversation.
 
 For every test, regardless of model:
 
-- [ ] **Auth:** reads use the `x-api-key` header; content writes use a user Bearer token (a key cannot write content, CTP-4734). Never Basic
+- [ ] **Auth:** content writes use a user Bearer token (a key cannot write content, CTP-4734). Reads use `x-api-key` in key-only runs; when both `CALCTREE_ACCESS_TOKEN` and `CALCTREE_API_KEY` are set, `calctree_api.py` sends the token on every request, so Bearer on read-backs is correct there. Never Basic
 - [ ] **No hallucinated values:** results come from the API response, not hand-computed
 - [ ] **Units preserved:** values reported with their units, not stripped to numbers
 - [ ] **Errors surfaced:** if a statement errors, the model reports it rather than guessing

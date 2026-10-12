@@ -66,17 +66,19 @@ and how to interpret the results.
   not required. The skill works identically without it.
 
   ```bash
-  export CALCTREE_API_KEY=...
+  export CALCTREE_API_KEY=...          # reads, execute, page creation
+  export CALCTREE_ACCESS_TOKEN=...     # also needed by build / insert (content writes)
   python3 scripts/calctree_api.py execute <workspaceId> <pageId> span="10 m" load="50 kN / m"
   python3 scripts/calctree_api.py build <workspaceId> "Beam check" page.mdx
   python3 scripts/calctree_api.py context <workspaceId> <pageId>
   ```
 
 - **`examples/smoke_two_page.py`** *(optional)* — end-to-end test that creates two linked
-  pages. Run it to confirm your key and endpoint work:
+  pages. Run it to confirm your token and endpoint work (it needs `CALCTREE_ACCESS_TOKEN`
+  and refuses to start without it):
 
   ```bash
-  python3 examples/smoke_two_page.py <workspaceId>
+  CALCTREE_ACCESS_TOKEN=... python3 examples/smoke_two_page.py <workspaceId>
   ```
 
 ## 1. Auth and environment setup
