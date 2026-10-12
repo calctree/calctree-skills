@@ -82,8 +82,11 @@ and how to interpret the results.
 ## 1. Auth and environment setup
 
 Endpoint: `https://graph.calctree.com/graphql`, header `x-api-key: <your key>`. That single
-key covers everything in this skill — reads, page creation, content writes, calculation
-writes.
+key covers reads, `simpleCalculate` and page creation, but **not content writes**:
+`insertMDXContent` under a key fails with `YJS authentication failed` (CTP-4734). Writing
+page content needs a user Bearer token, see REFERENCE.md, "Writing content: use a user
+token". If you only have a key, you can discover, inspect and run pages, and create empty
+ones; tell the user that building a page needs their sign-in rather than retrying.
 
 ### Network access is required
 

@@ -7,6 +7,18 @@ Get the latest zip from
 [releases/latest/download/calctree.zip](https://github.com/calctree/calctree-skills/releases/latest/download/calctree.zip).
 In Claude Code, run `/plugin marketplace update calctree`.
 
+## 1.1.1
+
+Corrects the claim that one API key covers reads and writes.
+
+- **An API key cannot write page content.** `createPageSync`, `addPageNode` and
+  `deletePage` work under `x-api-key`, but `insertMDXContent` fails with `YJS
+  authentication failed` (CTP-4734). A user Bearer token from the email and password
+  login does write. `REFERENCE.md` now documents that path, and `SKILL.md`, `AGENTS.md`,
+  `README.md` and `context7.json` no longer say a key covers writes.
+- **`calctree_api.py`** turns the `YJS authentication failed` error into a message that
+  says what is happening instead of leaving the caller to retry.
+
 ## 1.1.0
 
 Brings the skill's authoring rules in line with the CalcTree in-app AI, and adds live

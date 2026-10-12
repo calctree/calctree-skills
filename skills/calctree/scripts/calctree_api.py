@@ -11,6 +11,9 @@ Usable two ways:
   import:  from calctree_api import create_page_in_tree, insert_mdx_content, ...
   shell:   python3 calctree_api.py build <workspaceId> "Page title" page.mdx
 
+Note: an API key cannot write page content (CTP-4734), so `build` creates the page and
+then fails at the content step. Reads, `execute` and page creation work.
+
 Env:
   CALCTREE_API_KEY   required
   CALCTREE_GRAPH_URL optional, defaults to production
@@ -46,7 +49,7 @@ class CalcTreeError(RuntimeError):
 
 
 def _auth_headers() -> dict[str, str]:
-    """One API key covers reads, page creation and content/calculation writes."""
+    """An API key covers reads and page creation. It does not cover insertMDXContent (CTP-4734)."""
     key = os.environ.get("CALCTREE_API_KEY")
     if not key:
         raise CalcTreeError("Set CALCTREE_API_KEY")
@@ -79,6 +82,14 @@ def gql(query: str, variables: dict, timeout: int = GQL_TIMEOUT_S) -> dict:
             raise CalcTreeError(
                 f"GraphQL: {msg} — this is what an invalid or empty CALCTREE_API_KEY "
                 "looks like; check the key before debugging anything else."
+            )
+        # insertMDXContent under x-api-key (CTP-4734): the page was created but the
+        # content write was refused. Say so, because retrying cannot help.
+        if re.search(r"YJS authentication failed", msg, re.I):
+            raise CalcTreeError(
+                f"GraphQL: {msg} — an API key cannot write page content yet (CTP-4734). "
+                "Page creation worked; content writes need a user Bearer token, see "
+                "REFERENCE.md, 'Writing content: use a user token'."
             )
         raise CalcTreeError(f"GraphQL: {msg}")
     if "data" not in payload:

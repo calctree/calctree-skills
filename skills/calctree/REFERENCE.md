@@ -10,9 +10,32 @@ need the wire format.
 - **Headers:** `Content-Type: application/json`, `x-api-key: <your key>`
 - **Body:** `{"query": "<document>", "variables": { ... }}`
 
-One API key covers every call below. An invalid or empty key comes back as a bare
-`"Unexpected error."` with no 401 and no mention of auth — if you see that, check
-the key before debugging anything else.
+An API key covers every read below, plus page creation (`createPageSync`, `addPageNode`)
+and `deletePage`. **It does not cover writing page content:** `insertMDXContent` under
+`x-api-key` fails with `Failed to insert MDX content: YJS authentication failed`
+(CTP-4734; verified live 2026-10-12 with a 64-hex-character key). Content writes need a
+user Bearer token, see [Writing content: use a user token](#writing-content-use-a-user-token).
+An invalid or empty key comes back as a bare `"Unexpected error."` with no 401 and no
+mention of auth — if you see that, check the key before debugging anything else.
+
+### Writing content: use a user token
+
+Until CTP-4734 is fixed there is no key-based way to put content on a page. The write
+path that works is a user session token:
+
+```
+POST https://api.calctree.com/api/auth/login
+Content-Type: application/json
+{"email": "<user email>", "password": "<password>"}
+→ 201 {"accessToken": "<jwt>", "refreshToken": "...", ...}
+```
+
+Send `Authorization: Bearer <accessToken>` to `https://graph.calctree.com/graphql` instead of
+`x-api-key` for the whole write sequence (`createPageSync`, `addPageNode`,
+`insertMDXContent`). The access token lives 15 minutes. A page created with a key can be
+filled with a token, as long as the user is a member of the workspace. This path needs a
+password, so it suits a person's own scripts, not shared CI. `calctree_api.py` still sends
+`x-api-key` only, so `build` will create the page and then fail at the content step.
 
 ## Contents
 

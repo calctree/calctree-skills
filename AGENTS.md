@@ -23,7 +23,7 @@ skill; it is a pointer, not a second source of truth.
 ## Setup
 
 ```bash
-export CALCTREE_API_KEY=...      # one key covers reads and writes
+export CALCTREE_API_KEY=...      # reads and page creation only; content writes need a user token (CTP-4734)
 python3 skills/calctree/examples/smoke_two_page.py <workspaceId>
 ```
 
