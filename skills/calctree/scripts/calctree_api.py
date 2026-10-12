@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 """
+DEPRECATED: use the CalcTree MCP server (https://mcp.calctree.com/mcp) to find, read and
+run pages. This script stays only because the server cannot write page content yet, and
+will be removed after a release or two once it can. The CLI prints a one-line notice on
+stderr; set CALCTREE_NO_DEPRECATION_NOTICE=1 to silence it.
+
 CalcTree driving primitives: pages, MDX content, calculations, page-context reads
 and cross-page references, over the public GraphQL endpoint with an API key.
 
@@ -852,7 +857,20 @@ def _read_mdx(path: str) -> str:
     return sys.stdin.read() if path == "-" else open(path, encoding="utf-8").read()
 
 
+def _deprecation_notice(what: str) -> None:
+    """One line on stderr; CALCTREE_NO_DEPRECATION_NOTICE=1 silences it."""
+    if os.environ.get("CALCTREE_NO_DEPRECATION_NOTICE"):
+        return
+    print(
+        f"note: {what} is deprecated. The CalcTree MCP server (https://mcp.calctree.com/mcp) "
+        "finds and runs pages; this script stays only until it can write page content.",
+        file=sys.stderr,
+    )
+
+
 def main(argv: list[str]) -> int:
+    if len(argv) >= 2 and argv[1] not in ("-h", "--help", "help", "version"):
+        _deprecation_notice("calctree_api.py")
     if len(argv) < 2 or argv[1] in ("-h", "--help", "help"):
         print(USAGE)
         return 0

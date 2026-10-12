@@ -7,6 +7,25 @@ Get the latest zip from
 [releases/latest/download/calctree.zip](https://github.com/calctree/calctree-skills/releases/latest/download/calctree.zip).
 In Claude Code, run `/plugin marketplace update calctree`.
 
+## 1.2.0
+
+The plugin now connects the CalcTree MCP server, and the skill defers to it.
+
+- **`.mcp.json` ships with the plugin**, pointing at `https://mcp.calctree.com/mcp`.
+  Installing the plugin in Claude Code adds the server; sign in with your CalcTree account
+  the first time (`/mcp`, then Authenticate). The server can find, read and run pages, and
+  export PDFs. It cannot write page content yet, so building pages still follows the skill.
+- **Use the MCP server when it is connected.** `SKILL.md`, `README.md`, `AGENTS.md` and
+  `llms.txt` now point to it first. Connect steps for Claude.ai, Claude Desktop, Claude Code,
+  Cursor and ChatGPT: https://docs.calctree.com (Connect your AI to CalcTree).
+- **The Python scripts are deprecated** (`calctree_api.py`, `smoke_two_page.py`). They keep
+  working for now, because the MCP server has no write tools yet, and will be removed after a
+  release or two once it has. They print a one-line notice; set
+  `CALCTREE_NO_DEPRECATION_NOTICE=1` to silence it.
+- **Fixes from CTP-4931.** `llms.txt` no longer says one key covers content writes, and
+  the `SKILL.md` set-up walkthrough now covers signing in to the MCP server and the user
+  token needed to write, not just the API key.
+
 ## 1.1.1
 
 Corrects the claim that one API key covers reads and writes.

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 """
+DEPRECATED: the CalcTree MCP server (https://mcp.calctree.com/mcp) replaces the scripts for
+reading and running pages. This test stays until the server can write page content, then
+goes with them. It prints a one-line notice on stderr; set CALCTREE_NO_DEPRECATION_NOTICE=1
+to silence it.
+
 Two-page smoke test. Run this first to confirm your key and endpoint work end to end:
 
   1. create page A (registered in the tree) with inputs and a derived result
@@ -64,6 +69,10 @@ def show(label: str, ctx: dict) -> None:
 
 
 def main() -> int:
+    if not os.environ.get("CALCTREE_NO_DEPRECATION_NOTICE"):
+        print("note: smoke_two_page.py is deprecated. The CalcTree MCP server "
+              "(https://mcp.calctree.com/mcp) finds and runs pages; this test stays only "
+              "until it can write page content.", file=sys.stderr)
     if len(sys.argv) < 2:
         print("usage: python3 examples/smoke_two_page.py <workspaceId>", file=sys.stderr)
         return 2

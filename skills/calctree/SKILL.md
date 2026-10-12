@@ -14,10 +14,39 @@ Everything here is verified working against the live API. Treat it as settled.
 
 **When a user asks "what is this skill" or "how do I set it up"**, describe CalcTree as a
 platform for engineering calculations with real units, explain the three capabilities
-(discover, execute, build), and walk them through the setup (API key + network access).
+(discover, execute, build), and walk them through the setup:
+
+1. **Connect the CalcTree MCP server** (`https://mcp.calctree.com/mcp`). It covers finding
+   and running pages and exports PDFs, with nothing to paste: the first use opens a CalcTree
+   sign-in. In Claude Code the plugin adds it (then `/mcp` and Authenticate); in claude.ai and
+   Claude Desktop add it under Settings > Connectors; Cursor and ChatGPT steps are at
+   [docs.calctree.com](https://docs.calctree.com). An API key (sent as
+   `Authorization: Bearer <key>`) works where a browser sign-in does not.
+2. **Building pages** also needs network access and a user access token, because an API key
+   cannot write page content (see "1. Auth and environment setup"). Say this up front rather
+   than after a failed write.
+
 Do NOT surface the internal authoring rules (formula naming, MDX syntax, gotchas) — those
 are instructions for you when you are building pages, not information the user needs to
 hear about. Present CalcTree's unit awareness as a strength, not a list of pitfalls.
+
+## Use the MCP server when it is connected
+
+The CalcTree MCP server (`https://mcp.calctree.com/mcp`) supersedes the GraphQL calls and
+scripts below for reading and running pages. If you have tools named `whoami`,
+`list_workspaces`, `search_workspace`, `get_page`, `run_calculation`, `list_templates` and
+`create_pdf_report`:
+
+- **Find, read and run pages with those tools**, not with hand-written GraphQL or
+  `scripts/calctree_api.py`. A page or workspace argument takes an ID or a CalcTree URL.
+  Sections 2 and 4 below remain the reference for what the results mean.
+- **Call the `guide` tool** for authoring guidance, and use this skill's sections 3 and 5 to 11
+  for the rules it summarises.
+- **Build and edit pages with this skill.** The MCP server has no tools that write page
+  content yet (that needs a user token, section 3), so section 3 is still the write path.
+- If the server is not connected and the user wants to find or run pages, offer to connect it
+  (`claude mcp add --transport http calctree https://mcp.calctree.com/mcp` in Claude Code)
+  before falling back to the API below.
 
 ## Update check
 
@@ -65,6 +94,10 @@ and how to interpret the results.
   GraphQL calls, standard library only. Useful when you have Python + network access, but
   not required. The skill works identically without it.
 
+  **Deprecated:** the MCP server replaces this script for reads and runs, and it will be
+  removed after a release or two once the server can write pages. It prints a one-line notice
+  (silence it with `CALCTREE_NO_DEPRECATION_NOTICE=1`).
+
   ```bash
   export CALCTREE_API_KEY=...          # reads, execute, page creation
   export CALCTREE_ACCESS_TOKEN=...     # also needed by build / insert (content writes)
@@ -73,7 +106,7 @@ and how to interpret the results.
   python3 scripts/calctree_api.py context <workspaceId> <pageId>
   ```
 
-- **`examples/smoke_two_page.py`** *(optional)* — end-to-end test that creates two linked
+- **`examples/smoke_two_page.py`** *(optional, deprecated)* — end-to-end test that creates two linked
   pages. Run it to confirm your token and endpoint work (it needs `CALCTREE_ACCESS_TOKEN`
   and refuses to start without it):
 
@@ -82,6 +115,10 @@ and how to interpret the results.
   ```
 
 ## 1. Auth and environment setup
+
+This section is for driving the GraphQL API directly (building pages, or when the MCP server
+is not connected). Through the MCP server you sign in with your CalcTree account, or send an
+API key as `Authorization: Bearer <key>`, and there is nothing else to set up.
 
 Endpoint: `https://graph.calctree.com/graphql`, header `x-api-key: <your key>`. That single
 key covers reads, `simpleCalculate` and page creation, but **not content writes**:
