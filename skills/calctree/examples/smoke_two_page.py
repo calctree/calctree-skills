@@ -10,7 +10,8 @@ Two-page smoke test. Run this first to confirm your key and endpoint work end to
 
 It creates two real pages, so point it at a workspace you do not mind writing to.
 
-Usage: CALCTREE_API_KEY=... python3 examples/smoke_two_page.py <workspaceId>
+Usage: CALCTREE_ACCESS_TOKEN=... python3 examples/smoke_two_page.py <workspaceId>
+(An API key alone cannot write content, CTP-4734, so this needs the access token.)
 """
 import json
 import os
@@ -67,10 +68,14 @@ def main() -> int:
         print("usage: python3 examples/smoke_two_page.py <workspaceId>", file=sys.stderr)
         return 2
     ws = sys.argv[1]
-    if not os.environ.get("CALCTREE_API_KEY"):
-        print("set CALCTREE_API_KEY", file=sys.stderr)
+    if not os.environ.get("CALCTREE_ACCESS_TOKEN"):
+        # Refuse before creating anything: with a key alone, page creation succeeds and
+        # the content write then fails (CTP-4734), leaving an empty page behind.
+        print("set CALCTREE_ACCESS_TOKEN: an API key cannot write page content "
+              "(CTP-4734). See REFERENCE.md, 'Writing content: use a user token'.",
+              file=sys.stderr)
         return 2
-    print("using CALCTREE_API_KEY\n")
+    print("using CALCTREE_ACCESS_TOKEN\n")
 
     # 1. page A, with a formula that has to evaluate server-side
     a = create_page_in_tree(ws, "Smoke A - inputs")
@@ -80,7 +85,7 @@ def main() -> int:
           f"{ins['statementsCreated']} statement(s)")
     if ins["statementsCreated"] == 0 and ins["insertedCount"] > 0:
         print("  FAILED: nodes inserted but no statements created — the page will not "
-              "compute. Check CALCTREE_API_KEY.", file=sys.stderr)
+              "compute. Check CALCTREE_ACCESS_TOKEN.", file=sys.stderr)
         return 1
 
     titles = apply_mdx_statement_titles(ws, a["id"], MDX_A)

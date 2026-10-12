@@ -11,8 +11,14 @@ Usable two ways:
   import:  from calctree_api import create_page_in_tree, insert_mdx_content, ...
   shell:   python3 calctree_api.py build <workspaceId> "Page title" page.mdx
 
+Note: an API key cannot write page content (CTP-4734). With only CALCTREE_API_KEY,
+reads, `execute` and page creation work and anything that writes content fails. Set
+CALCTREE_ACCESS_TOKEN to write.
+
 Env:
-  CALCTREE_API_KEY   required
+  CALCTREE_ACCESS_TOKEN  user access token (Bearer). Needed to write page content, and
+                         expires after 15 minutes. See REFERENCE.md, "Writing content".
+  CALCTREE_API_KEY       API key. Reads and page creation only. One of the two is required.
   CALCTREE_GRAPH_URL optional, defaults to production
 
 Run `python3 calctree_api.py --help` for the command list.
@@ -46,10 +52,15 @@ class CalcTreeError(RuntimeError):
 
 
 def _auth_headers() -> dict[str, str]:
-    """One API key covers reads, page creation and content/calculation writes."""
+    """A user access token (CALCTREE_ACCESS_TOKEN) covers everything, including content
+    writes. An API key covers reads and page creation but not insertMDXContent (CTP-4734).
+    The token wins when both are set. An empty value counts as unset."""
+    token = os.environ.get("CALCTREE_ACCESS_TOKEN")
+    if token:
+        return {"Authorization": f"Bearer {token}"}
     key = os.environ.get("CALCTREE_API_KEY")
     if not key:
-        raise CalcTreeError("Set CALCTREE_API_KEY")
+        raise CalcTreeError("Set CALCTREE_ACCESS_TOKEN (needed to write content) or CALCTREE_API_KEY")
     return {"x-api-key": key}
 
 
@@ -60,9 +71,11 @@ GQL_TIMEOUT_S = 90
 
 def gql(query: str, variables: dict, timeout: int = GQL_TIMEOUT_S) -> dict:
     body = json.dumps({"query": query, "variables": variables}).encode()
+    auth = _auth_headers()
+    using_key = "x-api-key" in auth
     req = urllib.request.Request(
         GRAPH_URL, data=body, method="POST",
-        headers={"Content-Type": "application/json", **_auth_headers()},
+        headers={"Content-Type": "application/json", **auth},
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as res:
@@ -75,11 +88,29 @@ def gql(query: str, variables: dict, timeout: int = GQL_TIMEOUT_S) -> dict:
         msg = "; ".join(e.get("message", "?") for e in errors)
         # An invalid or empty API key surfaces as a bare "Unexpected error." with no
         # 401 and no mention of auth, so name the likely cause instead of passing it on.
+        # Diagnose the credential that was actually sent.
         if re.search(r"unexpected error", msg, re.I):
-            raise CalcTreeError(
-                f"GraphQL: {msg} — this is what an invalid or empty CALCTREE_API_KEY "
-                "looks like; check the key before debugging anything else."
+            cause = (
+                "this is what an invalid or empty CALCTREE_API_KEY looks like; check "
+                "the key before debugging anything else."
+                if using_key else
+                "with CALCTREE_ACCESS_TOKEN set this can be an expired or invalid token "
+                "(they last 15 minutes); get a fresh one before debugging anything else."
             )
+            raise CalcTreeError(f"GraphQL: {msg} — {cause}")
+        # insertMDXContent under x-api-key (CTP-4734): the content write was refused.
+        # Say so, because retrying cannot help. This says nothing about whether the
+        # page exists, since this function also serves inserts into existing pages.
+        if re.search(r"YJS authentication failed", msg, re.I):
+            cause = (
+                "an API key cannot write page content yet (CTP-4734). Content writes "
+                "need a user Bearer token: set CALCTREE_ACCESS_TOKEN, see REFERENCE.md, "
+                "'Writing content: use a user token'."
+                if using_key else
+                "CALCTREE_ACCESS_TOKEN was sent, so check that it has not expired "
+                "(15 minutes) and that its user can edit this workspace."
+            )
+            raise CalcTreeError(f"GraphQL: {msg} — {cause}")
         raise CalcTreeError(f"GraphQL: {msg}")
     if "data" not in payload:
         raise CalcTreeError("GraphQL response carried no data")
@@ -814,7 +845,7 @@ USAGE = """usage: python3 calctree_api.py <command> [args]
   delete      <workspaceId> <pageId>                 soft delete
   version                                            local and latest skill version
 
-'-' reads the MDX from stdin. Requires CALCTREE_API_KEY (except version)."""
+'-' reads the MDX from stdin. Requires CALCTREE_ACCESS_TOKEN or CALCTREE_API_KEY (except version)."""
 
 
 def _read_mdx(path: str) -> str:
