@@ -4,7 +4,27 @@ CalcTree is an engineering calculation platform. A **page** holds prose plus cal
 blocks; the blocks form a calculation graph that evaluates server-side with real units. This
 repo is how an AI agent drives it from outside the platform.
 
-**Read [`skills/calctree/SKILL.md`](skills/calctree/SKILL.md) first.**
+## Use the MCP server first
+
+If the CalcTree MCP server is connected (tools named `whoami`, `get_page`,
+`run_calculation`), use it to find, read and run pages. Do not drive the GraphQL API by hand
+for that.
+
+- URL: `https://mcp.calctree.com/mcp` (Streamable HTTP).
+- Auth: sign in with a CalcTree account (OAuth), or send an API key as
+  `Authorization: Bearer <key>`.
+- Tools: `whoami`, `list_workspaces`, `search_workspace`, `get_page`, `run_calculation`,
+  `list_templates`, `create_pdf_report`, `guide`. Call `guide` before you write or interpret
+  page content.
+- It cannot write page content yet. To build pages, follow the skill below.
+- Not connected? Claude Code: `claude mcp add --transport http calctree
+  https://mcp.calctree.com/mcp`. Cursor and other clients: add a remote MCP server with that
+  URL (steps at [docs.calctree.com](https://docs.calctree.com), "Connect your AI to
+  CalcTree").
+
+## Building pages and the skill
+
+**Read [`skills/calctree/SKILL.md`](skills/calctree/SKILL.md) for anything that writes.**
 It is the verified, current account of how to create and read calculation pages, and it
 supersedes any older CalcTree API documentation.
 
@@ -12,7 +32,10 @@ This file exists so agent tools that look for `AGENTS.md` — Cursor, Codex, and
 the same guidance Claude Code gets from the skill. There is nothing here that is not in the
 skill; it is a pointer, not a second source of truth.
 
-## What to read, depending on what you can run
+## What to read, depending on what you can run (the scripts are deprecated)
+
+The Python scripts and the raw GraphQL path predate the MCP server. They remain only for
+writing pages, until the MCP server can, and will be removed after a release or two.
 
 | You can | Read |
 |---|---|

@@ -1,19 +1,23 @@
 # CalcTree
 
-> CalcTree turns engineering calculations into API-callable tools. A page is a calculation graph that evaluates server-side with real units. This repo gives your AI the skill to discover pages in a workspace, execute them with custom inputs, and build new ones.
+> CalcTree turns engineering calculations into API-callable tools. A page is a calculation graph that evaluates server-side with real units. Connect the CalcTree MCP server to find pages in a workspace and run them with custom inputs; this repo's skill adds the page-building path.
 
-Read the skill first. It covers the tool-use workflow (discover, introspect, execute) and the page-building path, verified against the live API.
+Use the MCP server first: `https://mcp.calctree.com/mcp` (Streamable HTTP; sign in with a CalcTree account over OAuth, or send an API key as `Authorization: Bearer <key>`). Tools: `whoami`, `list_workspaces`, `search_workspace`, `get_page`, `run_calculation`, `list_templates`, `create_pdf_report`, `guide`. It reads and runs pages; it cannot write page content yet. Claude Code: `claude mcp add --transport http calctree https://mcp.calctree.com/mcp`, or install the plugin below, which adds it.
+
+Read the skill for building pages, and for the authoring rules that decide whether a generated page reads correctly. It is verified against the live API.
 
 ## Start here
 
-- [CalcTree skill](skills/calctree/SKILL.md): auth, using pages as tools, the write path, MDX calculation syntax, formula rules, and the authoring rules that decide whether a generated page reads correctly.
+- [Connect your AI to CalcTree](https://docs.calctree.com): the MCP server for Claude.ai, Claude Desktop, Claude Code, Cursor and ChatGPT.
+
+- [CalcTree skill](skills/calctree/SKILL.md): the write path, MDX calculation syntax, formula rules, and the authoring rules that decide whether a generated page reads correctly. It also covers driving the GraphQL API directly when the MCP server is not available.
 
 ## Install
 
-- [Skill zip](https://github.com/calctree/calctree-skills/releases/latest/download/calctree.zip): the latest release, for upload to claude.ai or the Claude desktop app. Claude Code: `/plugin marketplace add calctree/calctree-skills`.
+- [Skill zip](https://github.com/calctree/calctree-skills/releases/latest/download/calctree.zip): the latest release, for upload to claude.ai or the Claude desktop app. The zip is the skill only; connect the MCP server separately (above). Claude Code: `/plugin marketplace add calctree/calctree-skills`, then `/plugin install calctree@calctree`, which adds the skill and the MCP server.
 - [Changelog](CHANGELOG.md): what changed in each version.
 
-## Working code
+## Working code (deprecated: use the MCP server for reads and runs; kept until it can write)
 
 - [Primitives](skills/calctree/scripts/calctree_api.py): page listing, page-context reads, simpleCalculate (tool execution), page creation with tree registration, MDX content insert, calculation writes, CSV dataset uploads, template listing, cross-page references. Standard library only, importable or a CLI.
 - [GraphQL reference](skills/calctree/REFERENCE.md): every operation with its variables and response shape, for driving the API without running our code.
@@ -21,7 +25,7 @@ Read the skill first. It covers the tool-use workflow (discover, introspect, exe
 
 ## Notes
 
-- One `x-api-key` covers reads, page creation, tool execution (`simpleCalculate`) and content writes. An invalid key surfaces as a bare `"Unexpected error."`.
+- An `x-api-key` covers reads, page creation and tool execution (`simpleCalculate`), but not content writes: `insertMDXContent` under a key fails with `YJS authentication failed` (CTP-4734). Writing page content needs a user Bearer token (REFERENCE.md, "Writing content: use a user token"). An invalid key surfaces as a bare `"Unexpected error."`.
 - To use a page as a tool: `pages` → `context` → `simpleCalculate` with scope overrides.
 - Dataset variables (VLOOKUP) are not in the `simpleCalculate` scope.
 - A page must be registered in the page tree or it is orphaned and invisible.

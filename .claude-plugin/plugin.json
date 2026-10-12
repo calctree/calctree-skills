@@ -1,8 +1,8 @@
 {
   "name": "calctree",
   "displayName": "CalcTree",
-  "description": "Build and read CalcTree engineering calculation pages programmatically: create pages, insert MDX with live formulas, read computed values back with real units, and link pages together.",
-  "version": "1.1.1",
+  "description": "Find, read and run CalcTree engineering calculation pages from your AI through the CalcTree MCP server (mcp.calctree.com), plus the skill for building pages: MDX with live formulas, real units, linked pages.",
+  "version": "1.2.0",
   "author": {
     "name": "CalcTree",
     "url": "https://www.calctree.com"
@@ -13,6 +13,7 @@
     "calctree",
     "engineering",
     "calculations",
+    "mcp",
     "graphql",
     "mathjs",
     "units"

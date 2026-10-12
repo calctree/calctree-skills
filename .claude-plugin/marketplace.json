@@ -7,9 +7,9 @@
     {
       "name": "calctree",
       "source": "./",
-      "description": "Build and read CalcTree engineering calculation pages programmatically via the GraphQL API.",
+      "description": "Connects the CalcTree MCP server (find, read and run calculation pages) and adds the skill for building pages.",
       "category": "engineering",
-      "tags": ["calctree", "calculations", "engineering", "graphql"]
+      "tags": ["calctree", "calculations", "engineering", "mcp"]
     }
   ]
 }
