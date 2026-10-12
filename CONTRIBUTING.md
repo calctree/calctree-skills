@@ -35,7 +35,7 @@ The point of the Python rewrite is that this needs nothing but `python3`. Prove 
 with no Node, no `pip install`, and no other CalcTree checkout.
 
 ```bash
-export CALCTREE_API_KEY=...
+export CALCTREE_ACCESS_TOKEN=...   # an API key alone cannot write content (CTP-4734)
 python3 skills/calctree/examples/smoke_two_page.py <workspaceId>
 ```
 
@@ -43,7 +43,8 @@ Passes when: two page URLs print, `M_max = 360`, titles report `verified=True`, 
 shows the reference snapshot of page A's values. Needs `python3` (3.9 is the oldest tested) and
 network egress to `graph.calctree.com` and `api.calctree.com`.
 
-Then the CLI path, which is how an agent with only a shell drives it:
+Then the CLI path, which is how an agent with only a shell drives it (`build` writes content,
+so it needs `CALCTREE_ACCESS_TOKEN`):
 
 ```bash
 python3 skills/calctree/scripts/calctree_api.py build <workspaceId> "Test" page.mdx

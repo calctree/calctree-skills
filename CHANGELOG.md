@@ -16,8 +16,13 @@ Corrects the claim that one API key covers reads and writes.
   authentication failed` (CTP-4734). A user Bearer token from the email and password
   login does write. `REFERENCE.md` now documents that path, and `SKILL.md`, `AGENTS.md`,
   `README.md` and `context7.json` no longer say a key covers writes.
-- **`calctree_api.py`** turns the `YJS authentication failed` error into a message that
-  says what is happening instead of leaving the caller to retry.
+- **`calctree_api.py`** sends `CALCTREE_ACCESS_TOKEN` as a Bearer when it is set (it wins
+  over `CALCTREE_API_KEY`), so `build`, `insert` and the smoke test can write content. It
+  turns the `YJS authentication failed` error into a message that says what is happening
+  instead of leaving the caller to retry. `smoke_two_page.py` refuses to start without the
+  token rather than leave empty pages behind.
+- The write-path evals, `evals/TESTING.md` and `CONTRIBUTING.md` no longer require
+  `x-api-key` for content writes.
 
 ## 1.1.0
 

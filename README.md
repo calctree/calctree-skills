@@ -33,13 +33,13 @@ python3 skills/calctree/scripts/calctree_api.py execute <workspaceId> <pageId> s
 ```
 
 No install: standard library only, no pip, no Node. An API key covers reads and page
-creation, but not writing page content (CTP-4734): the smoke test below creates the pages
-and then fails at the content step until that is fixed. See `REFERENCE.md`, "Writing
-content: use a user token". The smoke test (creates two real pages, so point it at a
-workspace you do not mind writing to):
+creation, but not writing page content (CTP-4734). To write, set `CALCTREE_ACCESS_TOKEN`
+to a user access token (`REFERENCE.md`, "Writing content: use a user token"). The smoke
+test needs the token, refuses to start without it, and creates two real pages, so point
+it at a workspace you do not mind writing to:
 
 ```bash
-python3 skills/calctree/examples/smoke_two_page.py <workspaceId>
+CALCTREE_ACCESS_TOKEN=... python3 skills/calctree/examples/smoke_two_page.py <workspaceId>
 ```
 
 ## Installing it

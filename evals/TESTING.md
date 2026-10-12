@@ -4,7 +4,8 @@ How to test the tool-use and page-building paths across surfaces and models.
 
 ## Prerequisites
 
-1. A CalcTree API key (`CALCTREE_API_KEY`)
+1. A CalcTree API key (`CALCTREE_API_KEY`) for reads, and a user access token
+   (`CALCTREE_ACCESS_TOKEN`) for any test that writes page content (CTP-4734)
 2. A workspace id with at least one calculation page in it (a "Simply supported beam"
    page with `span`, `load`, `M_max` is ideal — the test prompts assume it)
 3. Python 3.9+ (stdlib only, no pip)
@@ -85,6 +86,7 @@ Read this CalcTree skill and use it to answer my question:
 https://raw.githubusercontent.com/calctree/calctree-skills/main/skills/calctree/SKILL.md
 
 My API key is: <key>
+My access token is: <token>   (only for prompts that write page content; keys cannot, CTP-4734)
 My workspace id is: <wsId>
 ```
 
@@ -144,7 +146,7 @@ checking the fetch outside a conversation.
 
 For every test, regardless of model:
 
-- [ ] **Auth:** uses `x-api-key` header, not Bearer, not Basic
+- [ ] **Auth:** reads use the `x-api-key` header; content writes use a user Bearer token (a key cannot write content, CTP-4734). Never Basic
 - [ ] **No hallucinated values:** results come from the API response, not hand-computed
 - [ ] **Units preserved:** values reported with their units, not stripped to numbers
 - [ ] **Errors surfaced:** if a statement errors, the model reports it rather than guessing
