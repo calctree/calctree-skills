@@ -523,6 +523,63 @@ accepted so that legacy templates keep working, but do not write it.
 
 No H1 in the body: the page title already renders as the heading.
 
+### Never hard-wrap prose
+
+**Write each paragraph as one long line.** A single newline inside a paragraph is a Markdown
+soft break and should render as a space, but the importer keeps it as a literal newline, so the
+page shows the sentence broken wherever your source happened to wrap:
+
+```
+Pipeline hydraulics for a Bingham-plastic slurry. The page works out the slurry and
+carrier
+properties from the solids concentration and the laboratory rheology, then the velocities
+that
+bound a safe operating window.
+```
+
+That is what the reader sees — breaks mid-sentence after "carrier" and after "velocities".
+Editors and formatters that wrap at 80 or 100 characters cause this, so it is easy to do
+without noticing, and it is invisible in the MDX you wrote.
+
+Write instead:
+
+```
+Pipeline hydraulics for a Bingham-plastic slurry. The page works out the slurry and carrier properties from the solids concentration and the laboratory rheology, then the velocities that bound a safe operating window.
+```
+
+Line length does not matter. Only paragraph text is affected — never unwrap anything inside a
+fence, and leave block-starting lines alone: JSX tags, table rows, headings, list items, fences
+and blank lines.
+
+If you are generating MDX from a file or a template that may already be wrapped, unwrap it
+before inserting. Join a line onto the previous one when the previous line was prose and this
+line does not start a block:
+
+```python
+import re
+
+def unwrap_prose(src: str) -> str:
+    starts_block = lambda l: bool(re.match(r"^\s*$", l) or re.match(r"^\s*(<|\||#|```|[-*+] |\d+\. |>)", l))
+    out, fenced, prev_prose = [], False, False
+    for line in src.split("
+"):
+        if re.match(r"^\s*```", line):
+            fenced = not fenced
+            out.append(line)
+            prev_prose = False
+            continue
+        if fenced:
+            out.append(line)
+            continue
+        if prev_prose and not starts_block(line):
+            out[-1] = out[-1].rstrip() + " " + line.strip()
+            continue
+        out.append(line)
+        prev_prose = bool(line.strip()) and not re.match(r"^\s*(<|\||#)", line)
+    return "
+".join(out)
+```
+
 ### Mentions
 
 A mention shows a live value, image or chip in the body. It is a markdown link whose target
