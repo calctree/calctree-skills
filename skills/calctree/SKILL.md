@@ -170,6 +170,47 @@ When matching by title, prefer the most recently modified copy, or ask the user 
 confirm if there are duplicates. If the user provides a page URL or ID, use that directly
 rather than searching by title.
 
+**Never report a page count, inventory, or judgement about a workspace from `pages()`
+alone.** Filtering "by title" does not help — a trashed page keeps its title, so duplicate
+titles are usually one live page plus its tombstones, not real duplicates. Observed in
+practice: a workspace reported **1,482 pages** against a tree holding a small fraction of
+that, and a folder that looked like "34 pages, mostly duplicates" was **9 live pages** and
+25 tombstones. Both readings were wrong, and wrong in the direction of telling the user
+their workspace is a mess when it is not.
+
+To get the live set, resolve ids through `page` and keep the non-null, non-`deletedAt`
+rows. Batch with aliases rather than one request per page:
+
+```graphql
+query($w: ID!) {
+  p0: page(workspaceId: $w, id: "abc") { id title deletedAt }
+  p1: page(workspaceId: $w, id: "def") { id title deletedAt }
+}
+```
+
+```python
+live = [v for v in result.values() if v and not v.get("deletedAt")]
+```
+
+### Reading the page tree
+
+`pageSubtree(workspaceId, pageId) { rootNode rootParentId }` returns the tree under any
+node as a JSON scalar. Pass a **folder's** id as `pageId` to get that folder's contents —
+this is the only way to reproduce what the user sees in their sidebar.
+
+Nodes carry `{id, iconUrl, pageType, children}`, and the root additionally carries
+`title`.
+
+Two traps, both of which make the tree look bigger and messier than it is:
+
+- **`rootNode` includes deleted nodes, and node objects carry no `deletedAt`.** The JSON
+  alone cannot tell you whether a page still exists. Walk the tree for ids, then
+  batch-resolve them through `page` as above.
+- **Child nodes usually omit `title`.** Do not try to read names out of the tree JSON;
+  join the ids against `page` (or a filtered `pages()` map) instead.
+
+A node whose `page` lookup returns `null` is gone or inaccessible — treat it as deleted.
+
 If `calctree_api.py` is available: `python3 calctree_api.py pages <workspaceId>`
 
 ### Introspect a page
