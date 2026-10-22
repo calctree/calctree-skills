@@ -523,9 +523,9 @@ accepted so that legacy templates keep working, but do not write it.
 
 No H1 in the body: the page title already renders as the heading.
 
-### Never hard-wrap prose
+### One paragraph, one line
 
-**Write each paragraph as one long line.** A single newline inside a paragraph is a Markdown
+**Do not wrap a paragraph across several lines.** A single newline inside a paragraph is a Markdown
 soft break and should render as a space, but the importer keeps it as a literal newline, so the
 page shows the sentence broken wherever your source happened to wrap:
 
@@ -547,12 +547,23 @@ Write instead:
 Pipeline hydraulics for a Bingham-plastic slurry. The page works out the slurry and carrier properties from the solids concentration and the laboratory rheology, then the velocities that bound a safe operating window.
 ```
 
-Line length does not matter. Only paragraph text is affected — never unwrap anything inside a
-fence, and leave block-starting lines alone: JSX tags, table rows, headings, list items, fences
-and blank lines.
+Line length does not matter.
 
-If you are generating MDX from a file or a template that may already be wrapped, unwrap it
-before inserting. Join a line onto the previous one when the previous line was prose and this
+**A newline you meant is still a newline.** The rule is about *accidental* wrapping, not about
+avoiding line breaks:
+
+- **A blank line starts a new paragraph.** That is the normal way to separate prose, and it is
+  unaffected.
+- **A single newline inside a paragraph renders as a line break**, so it is the tool to reach for
+  when you genuinely want one — an address block, a short stack of lines. The damage comes from a
+  break you did not intend, put there by an editor wrapping at 80 or 100 characters.
+
+Only paragraph text is affected. Never touch anything inside a fence, and leave block-starting
+lines alone: JSX tags, table rows, headings, list items, fences and blank lines.
+
+If you are generating MDX from a file or template that **you know was machine-wrapped**, unwrap it
+before inserting. Do not run this over prose containing deliberate breaks — it cannot tell the
+difference. Join a line onto the previous one when the previous line was prose and this
 line does not start a block:
 
 ```python
