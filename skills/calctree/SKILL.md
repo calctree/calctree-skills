@@ -1132,3 +1132,136 @@ delete-and-recreate cleanly.
 - Client-minted UUIDs are accepted for page and statement ids, so pages you create
   this way have UUID ids while platform-created pages have 21-character nanoids.
   Nothing depends on the shape, but it is how you tell them apart in a workspace.
+
+## 15. API shapes that bite
+
+Every entry below cost a wrong answer in a live session. They are the parts of the schema
+where the obvious call returns something that looks right and is not.
+
+### Wrapper objects, not lists
+
+`workspaceMembers2` returns an **object** with `count` and `members`, not an array. Calling
+`len()` on it counts the object's keys, so a five-member workspace reports as 1 or 2 and the
+answer looks plausible. Always read `count`, and request `members` explicitly:
+
+```graphql
+query($w: ID!){
+  workspaceMembers2(workspaceId: $w){
+    count
+    members { __typename }
+  }
+}
+```
+
+Assume any `*s2` or plural field may be a wrapper. Introspect before indexing into it.
+
+### `tree` versus `rootNode`
+
+The two tree queries disagree on their field name for the same JSON scalar:
+
+| Query | Field |
+|---|---|
+| `pageTree(workspaceId)` | `tree` |
+| `pageSubtree(workspaceId, pageId)` | `rootNode`, plus `rootParentId` |
+
+Querying the wrong one fails with `Cannot query field "rootNode" on type "PageTree"`. Both
+carry tombstoned nodes — see § 2 for the filter.
+
+### Soft delete is reversible
+
+```graphql
+mutation($w: ID!, $i: ID!){ deletePage(workspaceId: $w, id: $i){ __typename } }
+mutation($w: ID!, $i: ID!){ restorePage(workspaceId: $w, id: $i){ __typename } }
+```
+
+Both take `id`, not `pageId`, and `deletePage` returns `PageCorrelation`, so it needs a
+selection set. `restoreFolderNode` exists for folders.
+
+**Deleting a folder deletes its whole subtree.** If you resolve "the pages under X" by walking
+descendants recursively, you will take more than you meant to — a folder named like scratch
+work can contain real content several levels down. Enumerate direct children, show the list,
+and confirm before deleting anything you did not create.
+
+### Writing calculation statements
+
+`createOrUpdateCalculation` takes **`withStatements`**, not `statements`:
+
+```graphql
+mutation($w: ID!, $c: ID!, $s: [CreateStatementInput!]!){
+  createOrUpdateCalculation(workspaceId: $w, calculationId: $c, withStatements: $s){
+    calculationId
+  }
+}
+```
+
+`CreateStatementInput` is `{statementId, title, engine, formula, deleted?}` — **`statementId`
+is required**, so mint one yourself for a new statement. Set `deleted: true` to retire one.
+
+The important limitation: **this writes only the calculation graph, with no body node.** A
+statement created this way computes and is readable, but does not appear on the page. Anything
+the user must see goes through `insertMDXContent` instead, which creates both. Use
+`createOrUpdateCalculation` to *edit* statements that already have body nodes.
+
+### The `connection` engine
+
+A connection node is a statement with `engine: "connection"` whose formula is JSON:
+
+```json
+{
+  "modelId": "csi-active",
+  "softwareType": "etabs",
+  "variables": [
+    {"id": "<nanoid>", "name": "story_drifts",
+     "config": {"tableKey": "Story Drifts", "displayName": "Story Drifts"}}
+  ],
+  "inputs": [],
+  "script": "",
+  "scope": []
+}
+```
+
+`inputs`, `script` and `scope` are **required** — omitting them fails with
+`ConnectionFormulaError: Failed to parse connection formula`, and the message does not say
+which key is missing. `scope` caches the last sync as `[[name, {name, value, type}]]` where
+`value` is a JSON **string**; send `[]` and let the app repopulate it.
+
+For CSI products (ETABS, SAP2000, SAFE, CSiBridge) the variable config key is `tableKey`, and
+the value arrives as an array of row dicts with **every field stringified**. For Excel it is
+`{sheet, cell}`.
+
+Observed: the node's `script` field does not reliably export its assignments to page scope,
+despite the inline comment saying it does. The **variable** does. Put the table in a variable
+and do the work in a separate `python` statement that reads it.
+
+### Python statement sandbox
+
+`globals()` is blocked — `Disallowed use of function: globals`. To read a variable that may not
+exist yet, guard with `NameError`:
+
+```python
+try:
+    rows = story_drifts or []
+except NameError:
+    rows = []
+```
+
+### Template source
+
+`TemplateSource` is an enum: `workspace`, `builtin`, `shared`. `createWorkspaceTemplate` takes
+`{id, name, description?, tags?, content, source, sourceId?, versionId?, revisionId?,
+docContentVersion?}`. Built-in templates are visible to every user, so treat writes with
+`source: builtin` as a production change, not a workspace change.
+
+### Traffic lights and duplicate definitions
+
+`<TrafficLights name="x" />` creates a statement named `x` with an **empty formula**. If `x` is
+also defined in an EquationBlock, the variable ends up defined twice and the chip renders the
+literal word `undefined`.
+
+Define the boolean **only** in the traffic light's own statement, one hop after the block that
+computes its input:
+
+```
+drift_check   (multiline_mathjs)  util = M_max / M_cap
+within_limits (mathjs)            within_limits = smallerEq(util, 1)
+```
