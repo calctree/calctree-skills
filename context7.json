@@ -13,7 +13,7 @@
     "Read skills/calctree/SKILL.md first, and REFERENCE.md for the exact GraphQL documents: it is verified against the live API and supersedes any older CalcTree documentation",
     "To use a CalcTree page as a tool: (1) list_workspace_pages to discover pages, (2) get_page_context to introspect inputs and outputs, (3) simple_calculate with scope overrides to execute with custom inputs",
     "simple_calculate takes scope: [{name, value}] where values are MathJS-serialised strings like '10 m' or '50 kN / m'. It returns recomputed namedValues for every statement. calculationId equals the page id",
-    "One 'x-api-key' header covers everything: reads, simpleCalculate (tool execution), page creation, insertMDXContent and createOrUpdateCalculation. Verified live 2026-08-21",
+    "An 'x-api-key' header covers reads, simpleCalculate (tool execution) and page creation, but NOT insertMDXContent: it fails with 'YJS authentication failed' under a key (CTP-4734, verified 2026-10-12). Content writes need a user Bearer token from POST https://api.calctree.com/api/auth/login",
     "An invalid or empty API key surfaces as a GraphQL 'Unexpected error.' with no 401 and no mention of auth: check the key before debugging anything else",
     "Values arrive MathJS-serialised: unit quantities as { mathjs: 'Unit', value: 8, unit: 'm' }, plain numbers, booleans, strings, matrices",
     "Dataset variables (VLOOKUP) are NOT included in the simpleCalculate scope — they always report 'Undefined symbol' even when the dataset works in the UI",

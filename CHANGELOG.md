@@ -7,6 +7,23 @@ Get the latest zip from
 [releases/latest/download/calctree.zip](https://github.com/calctree/calctree-skills/releases/latest/download/calctree.zip).
 In Claude Code, run `/plugin marketplace update calctree`.
 
+## 1.1.1
+
+Corrects the claim that one API key covers reads and writes.
+
+- **An API key cannot write page content.** `createPageSync`, `addPageNode` and
+  `deletePage` work under `x-api-key`, but `insertMDXContent` fails with `YJS
+  authentication failed` (CTP-4734). A user Bearer token from the email and password
+  login does write. `REFERENCE.md` now documents that path, and `SKILL.md`, `AGENTS.md`,
+  `README.md` and `context7.json` no longer say a key covers writes.
+- **`calctree_api.py`** sends `CALCTREE_ACCESS_TOKEN` as a Bearer when it is set (it wins
+  over `CALCTREE_API_KEY`), so `build`, `insert` and the smoke test can write content. It
+  turns the `YJS authentication failed` and `Unexpected error.` errors into messages that name
+  the credential actually sent (key or token) instead of leaving the caller to retry. `smoke_two_page.py` refuses to start without the
+  token rather than leave empty pages behind.
+- The write-path evals, `evals/TESTING.md` and `CONTRIBUTING.md` no longer require
+  `x-api-key` for content writes.
+
 ## 1.1.0
 
 Brings the skill's authoring rules in line with the CalcTree in-app AI, and adds live
